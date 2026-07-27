@@ -202,6 +202,28 @@ mlagents-learn config/ppo/3DBall.yaml --run-id=my_first_run
 - **연결 고리**: config의 `behaviors:` 아래 키(`3DBall`)와 Unity 인스펙터의 **Behavior Name**이 같아야 트레이너가 그 에이전트를 붙잡는다. 다르면 학습이 시작조차 안 된다.
 - 우리가 PPO에서 배운 개념이 여기 그대로 있다: `epsilon`=클리핑 ε, `beta`=엔트로피(탐험) 보너스, `lambd`=GAE λ, `gamma`=할인율, `num_epoch`=경험 재사용 횟수. **알고리즘을 알면 이 파일이 읽힌다.** (값을 어떻게 고를지는 설계 문서 7장.)
 
+### Environment Parameters — config로 환경을 바꾸는 손잡이
+
+에이전트의 하이퍼파라미터(`behaviors:`)와 별개로, **환경 자체의 값**(난이도·중력·목표 크기·스폰 개수 등)을 config에서 조절하는 장치다.
+
+- **Unity 쪽**: 에이전트 코드에서 `Academy.Instance.EnvironmentParameters.GetWithDefault("param_name", 기본값)`으로 읽는다. 이 값으로 스폰 위치·물체 크기 등을 세팅한다.
+- **config 쪽**: `environment_parameters:` 블록에 같은 이름으로 값을 준다. 재컴파일 없이 config만 고쳐 환경을 바꿀 수 있다.
+
+```yaml
+environment_parameters:
+  target_scale: 1.0          # 고정값
+  gravity:                   # 학습 중 무작위화(도메인 랜덤화)
+    sampler_type: uniform
+    sampler_parameters: { min_value: 7.0, max_value: 12.0 }
+  difficulty:                # 성과에 따라 단계 상승(커리큘럼)
+    curriculum:
+      - value: 0.0
+        completion_criteria: { measure: reward, threshold: 0.8, ... }
+      - value: 1.0
+```
+
+> 10장의 **Curriculum Learning**과 **Env Parameter Randomization**이 바로 이 블록으로 구현된다 — 고정·무작위·커리큘럼 세 형태가 전부 같은 environment parameter 위에 얹힌다.
+
 ---
 
 ## 12. `mlagents-learn` 주요 CLI 옵션
