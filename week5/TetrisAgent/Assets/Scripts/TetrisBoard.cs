@@ -68,7 +68,8 @@ namespace Tetris
         void BuildPreview(ref SpriteRenderer[] arr, Vector2 origin, string name)
         {
             var root = new GameObject(name).transform;
-            root.SetParent(transform);
+            root.SetParent(transform, false);
+            root.localPosition = Vector3.zero;
             arr = new SpriteRenderer[16];
             for (int y = 0; y < 4; y++)
                 for (int x = 0; x < 4; x++)
@@ -81,8 +82,8 @@ namespace Tetris
         SpriteRenderer MakeCell(string name, Vector3 pos, Transform parent)
         {
             var go = new GameObject(name);
-            go.transform.SetParent(parent);
-            go.transform.position = pos;
+            go.transform.SetParent(parent, false);   // 보드 transform 기준(로컬) 배치 → 보드마다 위치 분리
+            go.transform.localPosition = pos;
             float s = cellSize / spriteUnit;
             go.transform.localScale = new Vector3(s, s, 1f);
             var sr = go.AddComponent<SpriteRenderer>();
@@ -187,22 +188,38 @@ namespace Tetris
 
         bool InBoard(Vector2Int c) => c.x >= 0 && c.x < TetrisCore.Width && c.y >= 0 && c.y < TetrisCore.Height;
 
-        // 간단 HUD(IMGUI) — 에셋/폰트 의존 없이 점수 확인용.
-        // ponytail: 디버그용 IMGUI HUD. 예쁜 UI 필요하면 TMP + Canvas 로 교체.
+        // 보드별 개별 HUD(IMGUI). 각 보드의 월드 위치를 화면 좌표로 변환해 그 보드 옆에 띄운다.
+        // → 보드가 여러 개(병렬 에이전트) 떠 있어도 각자 자기 점수를 보여준다.
+        // ponytail: 디버그용. 예쁜 UI 필요하면 보드마다 World-Space Canvas + TMP 로 교체.
+        GUIStyle hudStyle;
+
         void OnGUI()
         {
-            GUI.skin.label.fontSize = 20;
-            GUI.Label(new Rect(10, 10, 300, 30), $"Score: {game.Score}");
-            GUI.Label(new Rect(10, 40, 300, 30), $"Level: {game.Level}");
-            GUI.Label(new Rect(10, 70, 300, 30), $"Lines: {game.Lines}");
-            if (game.GameOver)
+            if (game == null) return;
+            var cam = Camera.main;
+            if (cam == null) return;
+            if (hudStyle == null)
+                hudStyle = new GUIStyle(GUI.skin.label) { fontSize = 16, fontStyle = FontStyle.Bold };
+
+            // 이 보드의 왼쪽 위(Hold 패널 위) 월드 지점 → 화면 좌표
+            Vector3 sp = cam.WorldToScreenPoint(transform.TransformPoint(new Vector3(-5.5f, TetrisCore.Height - 0.5f, 0f)));
+            if (sp.z < 0f) return;                                    // 카메라 뒤면 그리지 않음
+            var r = new Rect(sp.x, Screen.height - sp.y, 220f, 20f);  // GUI는 좌상단 원점
+
+            GUI.Label(r, name, hudStyle);                       r.y += 20f;
+            GUI.Label(r, $"Score {game.Score}", hudStyle);      r.y += 20f;
+            GUI.Label(r, $"Level {game.Level}", hudStyle);      r.y += 20f;
+            GUI.Label(r, $"Lines {game.Lines}", hudStyle);      r.y += 20f;
+            if (game.GameOver) GUI.Label(r, "GAME OVER", hudStyle);
+
+            // 조작 안내는 사람이 직접 플레이하는 보드에만 (보드 아래에 표시)
+            if (autoPlay)
             {
-                GUI.skin.label.fontSize = 32;
-                GUI.Label(new Rect(10, 110, 400, 40), "GAME OVER  (R: restart)");
-                GUI.skin.label.fontSize = 20;
+                Vector3 cp = cam.WorldToScreenPoint(transform.TransformPoint(new Vector3(0f, -1.2f, 0f)));
+                if (cp.z > 0f)
+                    GUI.Label(new Rect(cp.x, Screen.height - cp.y, 560f, 40f),
+                        "←/→ 이동  ↓ 소프트  Space 하드드롭  ↑/X 회전  Z 반대  C/Shift 홀드  R 리셋", hudStyle);
             }
-            GUI.Label(new Rect(10, Screen.height - 90, 600, 80),
-                "←/→ 이동  ↓ 소프트드롭  Space 하드드롭\n↑/X 회전CW  Z 회전CCW  C/Shift 홀드  R 리셋");
         }
     }
 }
