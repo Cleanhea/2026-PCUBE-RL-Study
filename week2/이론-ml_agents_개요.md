@@ -2,7 +2,9 @@
 
 ## Unity ML-Agents 개요
 
-> 이 문서에서는 "알고리즘"(PPO)은 `week1/이론-PPO.md` 에서 끝냈다고 보고, 여기서는 **그 알고리즘을 Unity 게임 환경에 연결하는 틀**을 다룬다. 설치는 `week1/실습-mlagents_셋업.md`, 실제 설계 요령은 `week2/이론-에이전트_설계.md`.
+![image](assets/image1.png)
+
+> 이 문서에서는 "알고리즘"(PPO)은 끝냈다고 보고, 여기서는 **그 알고리즘을 Unity 게임 환경에 연결하는 틀**을 다룬다. 설치는 `week1/실습-mlagents_셋업.md`, 실제 설계 요령은 `week2/이론-에이전트_설계.md` 참고할 것.
 >
 >
 > 공식 문서: <https://docs.unity3d.com/Packages/com.unity.ml-agents@4.0/manual/ML-Agents-Overview.html>
@@ -67,6 +69,7 @@
 | **Action(행동)** | 에이전트가 취하는 조작. 연속(continuous)·이산(discrete). |
 | **Reward(보상)** | 얼마나 잘하고 있는지 나타내는 스칼라. 설계자가 코드로 부여한다. |
 | **Episode(에피소드)** | 시작~종료까지 하나의 시행. 종료(성공/실패/타임아웃) 시 리셋. |
+| **Step(스텝)** | 시뮬레이션의 최소 시간 단위(한 틱). 에피소드는 여러 스텝으로 이루어진다. Decision Requester가 몇 스텝마다 정책에 결정을 요청할지 정하고, config의 `max_steps`·`buffer_size` 등도 이 스텝 수를 기준으로 센다. |
 | **Academy** | 환경 전역을 관장하는 싱글턴. 모든 에이전트의 스텝을 동기화하고 파이썬과의 통신을 조율. 대개 직접 건드릴 일은 없다. |
 | **Decision Requester** | 몇 스텝마다 정책에 "결정을 요청"할지 정하는 컴포넌트. |
 
@@ -179,8 +182,8 @@ behaviors:
       learning_rate: 3.0e-4
       beta: 0.001         # 엔트로피 계수(탐험). PPO의 탐험 항.
       epsilon: 0.2        # ← PPO의 클리핑 범위 ε (1±0.2). PPO 문서 5장의 그 값!
-      lambd: 0.95         # GAE λ (어드밴티지 추정)
-      num_epoch: 3        # 모은 경험을 몇 번 재사용해 업데이트할지
+      lambd: 0.95         # GAE λ 어드밴티지 추정할때 가중평균의 가중치. 편향-분산 트레이드오프 결정, 0 = 분산 최소 편향 최대, 1 = 편향 최소 분산 최대
+      num_epoch: 3        # 모은 경험을 몇 번 재사용해 업데이트할지. PPO는 on-policy지만, 정책이 조금 변한 동안은 같은 데이터를 여러 번 써도 괜찮다는 전제로 이 값을 씀(약한 off-policy적 절충)
     network_settings:
       hidden_units: 128
       num_layers: 2
@@ -188,7 +191,7 @@ behaviors:
       extrinsic:
         gamma: 0.99       # 할인율
         strength: 1.0
-    max_steps: 500000
+    max_steps: 500000      # 학습 전체를 언제 끝낼지 결정  (모든 에이전트 에피소드 합산), 에피소드의 끝을 결정하는 agent의 max_steps과 다름
 ```
 
 ```shell
