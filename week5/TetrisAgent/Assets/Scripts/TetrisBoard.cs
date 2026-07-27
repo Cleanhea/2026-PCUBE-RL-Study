@@ -5,9 +5,9 @@ using UnityEngine.InputSystem.Controls;
 namespace Tetris
 {
     /// <summary>
-    /// TetrisCore 로직을 스프라이트 셀 그리드로 렌더링하고 키보드(New Input System)로 조작한다.
-    /// 사람이 플레이해 로직을 검증하는 용도. ML 학습 시에는 이 컴포넌트 대신
-    /// TetrisCore 를 직접 만든 Agent 스크립트가 Move/Rotate/Drop/Tick 를 호출하면 된다.
+    /// TetrisCore 로직을 스프라이트 셀 그리드로 렌더링한다. 두 가지 모드:
+    ///  - autoPlay = true : 자체 TetrisCore 를 만들어 키보드(New Input System)로 사람이 플레이(로직 검증용).
+    ///  - autoPlay = false: Bind(core) 로 받은 외부 코어(예: 에이전트의 env.Core)를 렌더만 한다(학습 관전용).
     /// </summary>
     public class TetrisBoard : MonoBehaviour
     {
@@ -19,6 +19,10 @@ namespace Tetris
         public float cellSize = 1f;
         public Color ghostColor = new Color(1f, 1f, 1f, 0.25f);
         public Color emptyColor = new Color(1f, 1f, 1f, 0.06f);
+
+        [Header("모드")]
+        [Tooltip("true: 자체 코어로 사람이 직접 플레이. false: Bind(core)로 받은 외부 코어를 렌더만 함(학습 관전).")]
+        public bool autoPlay = true;
 
         [Header("입력 반복(초)")]
         public float dasDelay = 0.15f;    // 첫 반복까지 지연
@@ -35,15 +39,23 @@ namespace Tetris
 
         void Awake()
         {
-            game = new TetrisCore(seed);
             spriteUnit = blockSprites[0] != null ? blockSprites[0].bounds.size.x : 1f;
             BuildBoard();
             BuildPreview(ref nextCells, new Vector2(TetrisCore.Width + 1.5f, TetrisCore.Height - 5), "Next");
             BuildPreview(ref holdCells, new Vector2(-5.5f, TetrisCore.Height - 5), "Hold");
+            if (autoPlay && game == null) game = new TetrisCore(seed);
         }
 
         // ML/코드에서 코어에 접근하기 위한 프로퍼티.
         public TetrisCore Game => game;
+
+        // 외부(에이전트) 코어를 이 보드가 렌더하도록 연결한다. 이후 이 보드는 입력/중력 없이 렌더만 한다.
+        // 예) 에이전트 Initialize() 안에서:  boardRef.Bind(env.Core);
+        public void Bind(TetrisCore core)
+        {
+            game = core;
+            autoPlay = false;
+        }
 
         void BuildBoard()
         {
@@ -83,8 +95,12 @@ namespace Tetris
 
         void Update()
         {
-            HandleInput();
-            game.Tick(Time.deltaTime);
+            if (game == null) return;          // autoPlay=false 이고 아직 Bind 전
+            if (autoPlay)
+            {
+                HandleInput();
+                game.Tick(Time.deltaTime);
+            }
             Render();
         }
 

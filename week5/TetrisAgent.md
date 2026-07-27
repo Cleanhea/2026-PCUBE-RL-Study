@@ -29,7 +29,7 @@ flowchart LR
 | 파일 | 역할 | 학습에 쓰나? |
 |---|---|---|
 | `TetrisCore.cs` | 순수 C# 게임 로직. Unity 비의존. 보드/조각/회전(SRS)/라인클리어/점수/게임오버 | ○ (간접) |
-| `TetrisBoard.cs` | 스프라이트 렌더 + 키보드 입력. **사람이 플레이해 로직 검증하는 용도** | ✕ (학습엔 불필요) |
+| `TetrisBoard.cs` | 스프라이트 렌더. 사람 플레이(`autoPlay`) 또는 **에이전트 코어 관전(`Bind`)** | △ (관전용, 선택) |
 | `TetrisEnv.cs` | 에이전트용 환경 래퍼. 고수준 배치 액션 + 관측 + 결과 | ○ (핵심) |
 
 ### 1-1. `TetrisEnv` 가 에이전트에게 주는 것
@@ -93,11 +93,13 @@ using Tetris;
 
 public class TetrisMLAgent : Agent
 {
+    [SerializeField] TetrisBoard viewBoard;   // (선택) 관전용 보드. 비워두면 렌더 안 함.
     TetrisEnv env;
 
     public override void Initialize()
     {
         env = new TetrisEnv(/* seed: 0 = 매번 랜덤 */);
+        if (viewBoard != null) viewBoard.Bind(env.Core);   // (선택) 이 에이전트 보드를 화면에 렌더
     }
 
     public override void OnEpisodeBegin()
@@ -141,8 +143,8 @@ public class TetrisMLAgent : Agent
   매 스텝 자동으로 결정을 요청한다. `OnActionReceived`에서 배치가 정확히 1번 일어나므로 *결정 1회 = 조각 1개*로 딱 맞는다.
   (수동으로 `RequestDecision()`를 호출하는 방법도 있다 — 왜 그렇게 하고 싶은지 이해했다면.)
 - **Update/Tick 없음**: 학습 Agent는 프레임 루프가 필요 없다. 중력·렌더는 신경 쓰지 마라.
-- **시각화(선택)**: 학습 장면을 눈으로 보고 싶다면 `TetrisBoard`가 **에이전트의 코어를 렌더**하도록
-  살짝 리팩터해야 한다(지금은 자기 코어를 새로 만든다). 학습 자체엔 불필요하니 나중에.
+- **시각화(선택, 지원됨)**: `TetrisBoard`를 `autoPlay=false`로 두고 `board.Bind(env.Core)`만 호출하면
+  그 에이전트의 보드가 화면에 그려진다(입력·중력 없이 렌더만). 세팅은 4-1절.
 
 ---
 
@@ -159,6 +161,21 @@ public class TetrisMLAgent : Agent
    - **Model**: 비워 둠
 3. **Decision Requester** 컴포넌트 부착, **Decision Period = 1**.
 4. **병렬 학습**: 이 오브젝트를 여러 개 복제(또는 프리팹화 후 여러 개 배치)하면 경험 수집이 빨라진다.
+
+### 4-1. 학습을 보면서 하기 (관전)
+
+`TetrisBoard`는 `autoPlay=false`면 자기 코어를 만들지 않고, `Bind(core)`로 받은 외부 코어를
+**입력·중력 없이 렌더만** 한다. 그래서 에이전트의 `env.Core`를 그대로 화면에 띄울 수 있다.
+
+1. 관전할 씬에 `TetrisBoard` GameObject를 하나 두고 블록 스프라이트 7개를 연결(SampleScene 것 복사).
+   Inspector에서 **`autoPlay` 체크 해제.**
+2. 카메라를 보드가 보이게 맞춘다(직교, SampleScene 세팅 참고).
+3. 에이전트 오브젝트의 `viewBoard` 슬롯에 그 보드를 연결. → `Initialize()`의 `Bind` 한 줄이 나머지를 처리.
+
+- **하나만 관전**: 병렬 에이전트가 여러 개여도 `viewBoard`를 연결한 **하나만** 그려진다(나머진 비워둠).
+- **속도**: Timescale을 올리면 조각이 순식간에 쌓여 안 보인다. 눈으로 볼 땐 Timescale 1,
+  또는 학습된 `.onnx` 추론(7절)으로 관전하면 편하다.
+- 렌더는 로직과 분리돼 있어 **학습 결과엔 영향 없다**(약간의 성능 오버헤드만).
 
 ---
 
@@ -224,7 +241,7 @@ mlagents-learn configs/tetris_sac.yaml --run-id=tetris_sac_01
 1. `results/<run-id>/Tetris.onnx` 생성됨.
 2. Behavior Parameters의 **Model**에 그 `.onnx` 할당.
 3. **Behavior Type = Inference Only** 로 두고 Play.
-4. 시각화하려면 4절의 "시각화(선택)"처럼 `TetrisBoard`로 에이전트 코어를 렌더.
+4. 시각화는 4-1절과 동일 — `TetrisBoard`(autoPlay off)를 `viewBoard`에 연결하면 됨.
 
 ---
 
@@ -239,6 +256,7 @@ mlagents-learn configs/tetris_sac.yaml --run-id=tetris_sac_01
 - [ ] 무효 액션 처리(마스킹 or 페널티) 했는가
 - [ ] Unity 패키지 ↔ pip mlagents 버전 정합
 - [ ] 초반에 리워드가 안 움직여도 `buffer_init_steps`만큼은 랜덤 수집 구간이라 정상
+- [ ] (관전 시) `TetrisBoard` autoPlay 꺼짐 + `viewBoard` 연결 + `Initialize`에서 `Bind` 호출
 
 ---
 
