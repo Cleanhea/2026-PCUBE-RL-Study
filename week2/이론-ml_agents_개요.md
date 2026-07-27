@@ -2,9 +2,10 @@
 
 ## Unity ML-Agents 개요
 
-> 이 문서는 **PPO를 이미 공부한** 사람이 ML-Agents를 처음 다룰 때 필요한 이론·용어·컴포넌트를 정리한다. "알고리즘"(PPO)은 `week1/이론-PPO.md` 에서 끝냈다고 보고, 여기서는 **그 알고리즘을 Unity 게임 환경에 연결하는 틀**을 다룬다. 설치는 `week1/실습-mlagents_셋업.md`, 실제 설계 요령은 `week2/이론-에이전트_설계.md`.
+![image](assets/image1.png)
+
+> 이 문서에서는 "알고리즘"(PPO)은 끝냈다고 보고, 여기서는 **그 알고리즘을 Unity 게임 환경에 연결하는 틀**을 다룬다. 설치는 `week1/실습-mlagents_셋업.md`, 실제 설계 요령은 `week2/이론-에이전트_설계.md` 참고할 것.
 >
-> **기준 버전**: Unity `6000.3.12f1` · `com.unity.ml-agents 4.0.x` (Release 23)
 >
 > 공식 문서: <https://docs.unity3d.com/Packages/com.unity.ml-agents@4.0/manual/ML-Agents-Overview.html>
 
@@ -68,6 +69,7 @@
 | **Action(행동)** | 에이전트가 취하는 조작. 연속(continuous)·이산(discrete). |
 | **Reward(보상)** | 얼마나 잘하고 있는지 나타내는 스칼라. 설계자가 코드로 부여한다. |
 | **Episode(에피소드)** | 시작~종료까지 하나의 시행. 종료(성공/실패/타임아웃) 시 리셋. |
+| **Step(스텝)** | 시뮬레이션의 최소 시간 단위(한 틱). 에피소드는 여러 스텝으로 이루어진다. Decision Requester가 몇 스텝마다 정책에 결정을 요청할지 정하고, config의 `max_steps`·`buffer_size` 등도 이 스텝 수를 기준으로 센다. |
 | **Academy** | 환경 전역을 관장하는 싱글턴. 모든 에이전트의 스텝을 동기화하고 파이썬과의 통신을 조율. 대개 직접 건드릴 일은 없다. |
 | **Decision Requester** | 몇 스텝마다 정책에 "결정을 요청"할지 정하는 컴포넌트. |
 
@@ -180,8 +182,8 @@ behaviors:
       learning_rate: 3.0e-4
       beta: 0.001         # 엔트로피 계수(탐험). PPO의 탐험 항.
       epsilon: 0.2        # ← PPO의 클리핑 범위 ε (1±0.2). PPO 문서 5장의 그 값!
-      lambd: 0.95         # GAE λ (어드밴티지 추정)
-      num_epoch: 3        # 모은 경험을 몇 번 재사용해 업데이트할지
+      lambd: 0.95         # GAE λ 어드밴티지 추정할때 가중평균의 가중치. 편향-분산 트레이드오프 결정, 0 = 분산 최소 편향 최대, 1 = 편향 최소 분산 최대
+      num_epoch: 3        # 모은 경험을 몇 번 재사용해 업데이트할지. PPO는 on-policy지만, 정책이 조금 변한 동안은 같은 데이터를 여러 번 써도 괜찮다는 전제로 이 값을 씀(약한 off-policy적 절충)
     network_settings:
       hidden_units: 128
       num_layers: 2
@@ -189,7 +191,7 @@ behaviors:
       extrinsic:
         gamma: 0.99       # 할인율
         strength: 1.0
-    max_steps: 500000
+    max_steps: 500000      # 학습 전체를 언제 끝낼지 결정  (모든 에이전트 에피소드 합산), 에피소드의 끝을 결정하는 agent의 max_steps과 다름
 ```
 
 ```shell
@@ -200,9 +202,55 @@ mlagents-learn config/ppo/3DBall.yaml --run-id=my_first_run
 - **연결 고리**: config의 `behaviors:` 아래 키(`3DBall`)와 Unity 인스펙터의 **Behavior Name**이 같아야 트레이너가 그 에이전트를 붙잡는다. 다르면 학습이 시작조차 안 된다.
 - 우리가 PPO에서 배운 개념이 여기 그대로 있다: `epsilon`=클리핑 ε, `beta`=엔트로피(탐험) 보너스, `lambd`=GAE λ, `gamma`=할인율, `num_epoch`=경험 재사용 횟수. **알고리즘을 알면 이 파일이 읽힌다.** (값을 어떻게 고를지는 설계 문서 7장.)
 
+### Environment Parameters — config로 환경을 바꾸는 손잡이
+
+에이전트의 하이퍼파라미터(`behaviors:`)와 별개로, **환경 자체의 값**(난이도·중력·목표 크기·스폰 개수 등)을 config에서 조절하는 장치다.
+
+- **Unity 쪽**: 에이전트 코드에서 `Academy.Instance.EnvironmentParameters.GetWithDefault("param_name", 기본값)`으로 읽는다. 이 값으로 스폰 위치·물체 크기 등을 세팅한다.
+- **config 쪽**: `environment_parameters:` 블록에 같은 이름으로 값을 준다. 재컴파일 없이 config만 고쳐 환경을 바꿀 수 있다.
+
+```yaml
+environment_parameters:
+  target_scale: 1.0          # 고정값
+  gravity:                   # 학습 중 무작위화(도메인 랜덤화)
+    sampler_type: uniform
+    sampler_parameters: { min_value: 7.0, max_value: 12.0 }
+  difficulty:                # 성과에 따라 단계 상승(커리큘럼)
+    curriculum:
+      - value: 0.0
+        completion_criteria: { measure: reward, threshold: 0.8, ... }
+      - value: 1.0
+```
+
+> 10장의 **Curriculum Learning**과 **Env Parameter Randomization**이 바로 이 블록으로 구현된다 — 고정·무작위·커리큘럼 세 형태가 전부 같은 environment parameter 위에 얹힌다.
+
 ---
 
-## 12. 학습 결과물
+## 12. `mlagents-learn` 주요 CLI 옵션
+
+config YAML 외에, 실행할 때마다 바뀌는 값들(재개 여부, 초기 가중치, 렌더링 여부 등)은 CLI 인자로 넘긴다.
+
+```shell
+mlagents-learn config/ppo/3DBall.yaml --run-id=my_first_run --resume
+```
+
+| 옵션 | 뜻 | 언제 쓰나 |
+| --- | --- | --- |
+| **--run-id=\<name\>** | 이번 실행의 이름. 결과가 `results/<run-id>/`에 쌓인다. | 매 실행 필수 — 결과 폴더를 구분한다. |
+| **--resume** | 같은 `--run-id`의 **체크포인트에서 이어서 학습**. | 중간에 끊긴 학습(정전, 타임아웃)을 이어갈 때. run-id 폴더가 없으면 에러 난다. |
+| **--force** | 같은 `--run-id`가 이미 있어도 **덮어쓰고 새로 시작**. | 실수로 같은 run-id를 다시 돌릴 때, 또는 의도적으로 처음부터 재시작할 때. `--resume`과 같이 못 쓴다. |
+| **--initialize-from=\<run-id\>** | **다른 run-id의 최종 체크포인트**를 초기 가중치로 불러와 새 run으로 시작. | 전이학습(transfer learning) — 비슷한 과제로 학습한 정책을 새 과제의 출발점으로 쓸 때. `--resume`과 달리 run-id/스텝 카운트는 새로 시작한다. |
+| **--env=\<path\>** | Unity 에디터 대신 **빌드된 실행 파일**로 학습. | 에디터 없이 빠르게/여러 환경 병렬로 돌릴 때(사전에 File > Build Settings로 빌드해 둬야 함). |
+| **--num-envs=\<N\>** | `--env` 사용 시 **환경 인스턴스를 N개 병렬 실행**해 경험 수집 속도를 올림. | 학습이 CPU/환경 시뮬레이션에 병목일 때. |
+| **--no-graphics** | 빌드 실행 시 **렌더링을 끄고** 학습(속도↑). | 화면을 볼 필요 없는 headless 학습(서버·CI 등). 시각 관측(Camera Sensor) 쓰는 에이전트에는 못 쓴다. |
+| **--seed=\<N\>** | 난수 시드 고정. | 실험 재현성이 필요할 때. |
+| **--torch-device=\<device\>** | 학습에 쓸 디바이스 지정(예: `cpu`, `cuda`, `mps`). | GPU 학습을 강제하거나 특정 GPU를 지정할 때. |
+
+> **주의**: `--resume`은 같은 config로 이어서 학습하는 것이고, `--initialize-from`은 가중치만 가져와 **다른(새) run으로 처음부터** 학습 카운트를 시작하는 것이다 — 둘을 헷갈리면 "학습이 끊긴 지점부터 이어지길" 기대했다가 스텝 카운트가 0부터 다시 도는 걸 보고 당황하게 된다.
+
+---
+
+## 13. 학습 결과물
 
 - **`.onnx` 모델**: 학습된 정책. `results/<run-id>/<BehaviorName>.onnx`. 이걸 `Behavior Parameters`의 Model 슬롯에 넣으면 Unity가 파이썬 없이 추론한다.
 - **TensorBoard 로그**: `tensorboard --logdir results` 로 누적 보상·엔트로피·손실 곡선을 본다. 학습이 잘 되는지 판단하는 핵심 도구(→ 설계 문서 8장).
