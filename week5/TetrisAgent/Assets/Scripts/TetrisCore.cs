@@ -160,6 +160,38 @@ namespace Tetris
             Score += dist * 2;
             LockPiece();
         }
+        // ---- 에이전트용 그리드 배치 액션 ----
+        // 현재 조각을 목표 column(가장 왼쪽 셀의 x)과 rotation(0..3)으로 상단에서 정렬한 뒤
+        // 즉시 하드드롭해 그 위치에 배치한다. 배치 불가(범위 밖/막힘)면 상태를 바꾸지 않고 false.
+        // ML 에이전트의 고수준 이산 액션(열 x 회전)에 대응한다.
+        public bool PlacePiece(int column, int rotation)
+        {
+            if (GameOver) return false;
+            if (!ResolvePlacement(column, rotation, out int rot, out Vector2Int pos)) return false;
+            Rotation = rot;
+            Pos = pos;
+            HardDrop();
+            return true;
+        }
+
+        // 배치 가능 여부만 검사(상태 불변). 에이전트 액션 마스킹용.
+        public bool CanPlace(int column, int rotation)
+        {
+            if (GameOver) return false;
+            return ResolvePlacement(column, rotation, out _, out _);
+        }
+
+        // column/rotation -> 상단 정렬 위치 계산 + 유효성 검사.
+        bool ResolvePlacement(int column, int rotation, out int rot, out Vector2Int pos)
+        {
+            rot = ((rotation % 4) + 4) % 4;
+            var cells = shapes[(int)Current][rot];
+            int minX = int.MaxValue;
+            foreach (var c in cells) if (c.x < minX) minX = c.x;
+            pos = new Vector2Int(column - minX, spawnPos[(int)Current].y);
+            return Fits(Current, rot, pos);
+        }
+
 
         public bool Rotate(int dir) // +1 CW, -1 CCW
         {
@@ -425,6 +457,18 @@ namespace Tetris
             A(c4 == 4, "4줄 감지");
             // ClearFullLines는 점수를 더하지 않음(LockPiece에서 더함). 점수 규칙만 직접 확인.
             A(LineScore[4] == 800, "테트리스 기본점 800");
+
+            // 그리드 배치 액션: 빈 보드에 배치하면 그리드에 4셀 고정
+            var g5 = new TetrisCore(seed: 3);
+            A(g5.PlacePiece(0, 0), "PlacePiece 유효 배치");
+            A(CountOccupied(g5) == 4, "배치 후 4셀 고정");
+
+            // 범위 밖 배치는 거부되고 상태 불변
+            var g6 = new TetrisCore(seed: 5);
+            g6.Current = PieceType.I; g6.Rotation = 0; g6.Pos = spawnPos[(int)PieceType.I];
+            A(!g6.PlacePiece(9, 0), "범위 밖 배치 거부");
+            A(CountOccupied(g6) == 0, "거부 시 상태 불변");
+            A(g6.CanPlace(0, 0) && !g6.CanPlace(9, 0), "CanPlace 유효성");
 
             return "SelfTest OK";
         }
