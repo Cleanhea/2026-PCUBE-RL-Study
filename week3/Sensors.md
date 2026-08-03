@@ -23,7 +23,7 @@
 ---
 
 ## Ray Perception 핵심 설정
-
+![alt text](assets/image-12.png)
 - **Detectable Tags**: 감지할 태그 목록. 여기 넣은 태그별로 관측이 갈린다 → 미리 태그를 만들어 둬야 함.
 - **Rays Per Direction**: 정면 기준 좌우로 몇 개씩 쏠지. `N`이면 총 `2N+1`개.
 - **Max Ray Degrees**: 부채꼴이 벌어지는 각도.
@@ -35,9 +35,9 @@
 ---
 
 ## Camera 핵심 설정
-
-- **Camera**: 관측으로 쓸 카메라(에이전트 시점 카메라를 따로 두는 게 보통).
-- **Width / Height**: 관측 이미지 해상도. 기본 `84×84`. 키우면 정보량↑·학습 비용↑.
+![alt text](assets/image-13.png)
+- **Camera**: 관측으로 쓸 카메라(에이전트 시점 카메라를 따로 두는 게 보통). 정보를 가리지 않아야 함.
+- **Width / Height**: 관측 이미지 해상도. 기본 `84×84` (은 너무 클 수 있다). 키우면 정보량↑·학습 비용↑. 낮은 해상도에서 직접 플레이해보고 "이정도면 할 수 있겠다"로 맞추기
 - **Grayscale**: 흑백으로 관측(색이 필요 없으면 켜서 채널 3→1로 경량화).
 - **Compression Type**: `PNG` 압축이면 전송량↓(기본 권장), `None`이면 무압축.
 - **Observation Stacks**: 최근 N프레임을 쌓아 관측(움직임·속도 감지에 필요).
@@ -47,7 +47,7 @@
 ---
 
 ## Render Texture 핵심 설정
-
+![alt text](assets/image-14.png)
 Camera와 거의 동일하되, 카메라 대신 **RenderTexture 에셋**을 관측한다.
 
 - **Render Texture**: 관측할 RenderTexture(미니맵·특수 렌더 결과 등).
@@ -58,7 +58,7 @@ Camera와 거의 동일하되, 카메라 대신 **RenderTexture 에셋**을 관�
 ---
 
 ## Grid 핵심 설정
-
+![alt text](assets/image-16.png)
 에이전트 주변을 격자로 훑어, 칸마다 어떤 태그 물체가 있는지 관측.
 
 - **Cell Scale**: 칸 하나의 실제 크기(월드 단위). 격자 해상도.
@@ -82,7 +82,7 @@ Camera와 거의 동일하되, 카메라 대신 **RenderTexture 에셋**을 관�
 ---
 
 ## Physics (RigidBody / Joint) 핵심 설정
-
+![alt text](assets/image-15.png)
 로봇·관절처럼 물리 상태 자체가 관측인 경우.
 
 - **Root Body**: 관측의 기준이 되는 루트 Rigidbody.
