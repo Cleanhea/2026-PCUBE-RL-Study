@@ -24,9 +24,12 @@ tensorboard --logdir results
 
 ## 1. Environment (환경 관련)
 
-- **Cumulative Reward**: 에피소드당 누적 보상. **"학습이 잘 되고 있나"의 최우선 지표.** 우상향하다가 후반부에 평평해지는(수렴) 모양이 이상적. 계속 0 근처거나 요동만 치면 보상 설계·관측·행동 중 뭔가 어긋난 것.
+- **Cumulative Reward**: 에피소드당 누적 보상. **"학습이 잘 되고 있나"의 최우선 지표.** 우상향하다가 후반부에 평평해지는(수렴) 모양이 이상적. 계속 0 근처거나 요동만 치면 보상 설계·관측·행동 중 뭔가 어긋난 것. 
+  ![alt text](assets/image.png)
 - **Cumulative Reward (Histogram 탭)**: 보상값의 **분포**가 스텝에 따라 어떻게 바뀌는지 보여주는 히스토그램. 분포가 오른쪽(높은 보상)으로 이동 = 정책이 좋아지는 중. 분포가 넓게 퍼져 있으면 에이전트별 성능 편차가 크다는 뜻(운/초기위치 의존).
+  ![alt text](assets/image-1.png)
 - **Episode Length**: 에피소드가 몇 스텝 만에 끝나는지. MaxStep 타임아웃까지 항상 채우면 평평하다. **조기 종료 문제**(떨어짐/실패로 `EndEpisode` 호출)를 여기서 발견한다. 과제에 따라 "빨리 끝내는 게 좋은" 경우엔 오히려 줄어드는 게 정상.
+  ![alt text](assets/image-11.png)
 
 ---
 
@@ -35,18 +38,26 @@ tensorboard --logdir results
 여기 값들은 **절대 크기보다 추세**가 중요하다. "0에 가까워야 좋다"는 지도학습식 직관을 그대로 적용하면 안 됨.
 
 - **Policy Loss**: PPO의 clipped surrogate loss. 작은 값 근처에서 진동하는 게 정상. 학습이 진행되며 대체로 감소한다. 계속 커지거나 발산하면 학습률이 높거나 관측/보상 스케일이 튀는 것.
+  ![alt text](assets/image-3.png)
 - **Value Loss**: 크리틱(가치함수)의 예측 오차. **초반엔 낮다가 보상이 커지면서 같이 증가한 뒤 안정**되는 게 정상 — 가치 추정이 커진 보상 스케일을 따라잡는 자연스러운 패턴. 끝까지 계속 치솟기만 하면 가치함수가 못 따라잡는 것(보상 스케일이 너무 크거나 불안정).
+  ![alt text](assets/image-4.png)
 
 ---
 
 ## 3. Policy
 
 - **Entropy**: 정책 행동 분포의 무작위성(=탐색 정도). **감소 중 = 탐색에서 활용으로 전환**되는 정상 흐름. 너무 빨리 0으로 꺼지면 조기 수렴(탐색 부족) → `beta`를 키운다. 반대로 안 떨어지면 학습이 안 잡히는 것.
+  ![alt text](assets/image-6.png)
 - **Beta**: 엔트로피 보너스 계수. 탐색을 강제하는 힘. 설정한 스케줄대로 선형 감소.
+  ![alt text](assets/image-5.png)
 - **Epsilon**: PPO 클리핑 범위. `learning_rate_schedule: linear`이면 이것도 선형으로 줄어든다.
+  ![alt text](assets/image-7.png)
 - **Learning Rate**: 학습률. `linear` 스케줄이면 0을 향해 선형 감소. `constant`면 평평.
+  ![alt text](assets/image-8.png)
 - **Extrinsic Reward**: reward_signals에 `extrinsic`만 썼으므로 Cumulative Reward와 사실상 같은 값. "정책 쪽 관점"으로 본 보상이라 보면 된다.
+  ![alt text](assets/image-9.png)
 - **Extrinsic Value Estimate**: 크리틱이 예측한 상태가치. **실제 보상 곡선과 같이 우상향**해야 학습이 제대로 되는 것. 실제 보상은 오르는데 이 값이 안 따라오면 크리틱이 뒤처진 것(Value Loss와 함께 본다).
+  ![alt text](assets/image-10.png)
 
 > **참고 — 다른 reward signal을 쓰면** 여기에 항목이 더 생긴다. `curiosity`를 켜면 `Curiosity Reward` / `Curiosity Value Estimate`(Policy)와 `Curiosity Forward/Inverse Loss`(Losses)가, `gail`을 켜면 `GAIL Reward`·`GAIL Loss` 등이 추가된다. FoodCollector는 extrinsic만 쓰므로 해당 없음.
 
