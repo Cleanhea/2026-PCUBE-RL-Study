@@ -2,9 +2,7 @@
 
 Rogue 캐릭터가 스스로 돌아다니며 **고기(Meat)는 먹고 당근(Carrot)은 피하도록** 강화학습으로 훈련시키는 전체 절차. 코드는 나중에 작성하고, 이 문서는 "무엇을 · 어떤 순서로 · 왜" 하는지 설명하는 계획서다.
 
-> 이 계획은 현재 프로젝트 실제 상태를 확인하고 작성했다.
 > - Unity `com.unity.ml-agents 4.0.3` **이미 설치됨** (별도 패키지 설치 불필요)
-> - 참조 repo: `~/Documents/Projects/Unity/ml-agents` (`release/4.0.0` 브랜치, python `mlagents 1.2.0.dev0`)
 > - 씬(`MainScene`): `TrainingArea / Court / Floor`, `wall1~4`, `Rogue`(태그 `Player`), `Meat`×8, `Carrotfbx`×5
 > - 움직임은 `PlayerController.cs`(tank control, New Input System)로 이미 동작 — 이 로직을 재사용한다
 > - 태그는 `Player`만 존재. `food` / `badFood` / `wall` 태그는 **아직 없음**
@@ -47,18 +45,14 @@ Rogue 캐릭터가 스스로 돌아다니며 **고기(Meat)는 먹고 당근(Car
 ## 2. 파이썬 학습 환경 구축
 
 ### 2.1 왜 별도 가상환경인가
-ML-Agents Release 4는 보통 **Python 3.10.x**를 요구한다(torch/mlagents 의존성). → **3.10 전용 venv를 따로 만든다.**
+ML-Agents Release 4는 보통 **Python 3.10.x**를 요구한다(torch/mlagents 의존성). → **3.10 전용 가상환경을 따로 만든다.**
 
 ### 2.2 단계
-1. Python 3.10.x 설치 (pyenv / python.org / conda 중 택1).
-2. 가상환경 생성·활성화 (예: `python3.10 -m venv .venv-mlagents` → `source .venv-mlagents/bin/activate`).
-3. ML-Agents 설치 — **버전 정합이 중요**하다. Unity 패키지가 `4.0.3`이므로 python도 Release 4에 맞춘다. 두 방법:
-   - (권장) 로컬 참조 repo에서 editable 설치 → 버전이 정확히 일치:
-     `pip install -e ~/Documents/Projects/Unity/ml-agents/ml-agents-envs` 후 `pip install -e ~/Documents/Projects/Unity/ml-agents/ml-agents`
-   - (간편) PyPI: `pip install mlagents` (설치되는 버전이 Unity 패키지와 호환되는지 확인)
+1. Python 3.10.x 설치 (conda).
+2. 가상환경 생성·활성화
+3. ML-Agents 설치
+   - PyPI: `pip install mlagents` (설치되는 버전이 Unity 패키지와 호환되는지 확인)
 4. 설치 검증: `mlagents-learn --help` 가 정상 출력되면 OK.
-
-> **함정 체크리스트**: 파이썬 버전 불일치, torch 설치 실패(맥이면 CPU 빌드로 충분), Unity↔Python communicator 버전 mismatch 경고. 셋 다 "학습이 시작조차 안 되는" 대표 원인이다.
 
 ---
 
@@ -66,12 +60,10 @@ ML-Agents Release 4는 보통 **Python 3.10.x**를 요구한다(torch/mlagents �
 
 핵심 전환: **`PlayerController`(MonoBehaviour) → `Agent`(Unity.MLAgents.Agent) 상속 클래스**. 움직임 로직은 그대로 재활용하고, ML-Agents 생명주기 메서드만 얹는다.
 
-> 기존 `Assets/Scripts/FoodCollectorAgent.cs` 파일은 지금 낡은 `FoodAgent` 클래스(안 쓰는 잔재)다. 이 파일을 진짜 `Agent`로 새로 채우거나, `PlayerController`를 승격시키면 된다. **하나의 Agent 스크립트만 남긴다.**
-
 ### 3.1 재사용할 것 (이미 검증된 로직)
 - 이동: `rb.AddForce(transform.forward * forward * moveSpeed, VelocityChange)` + 최고속도 클램프(`sqrMagnitude > 25 → *0.95`)
-- 회전: `rb.MoveRotation(...)` (벽에 붙어도 회전되는, 지난번 버그 픽스 적용본)
-- 애니메이션: 속도로 `Speed` 파라미터 세팅
+- 회전: `rb.MoveRotation(...)`
+- 애니메이션
 
 ### 3.2 새로 구현할 Agent 오버라이드
 | 메서드 | 역할 | 이 프로젝트에서 할 일 |
@@ -83,7 +75,6 @@ ML-Agents Release 4는 보통 **Python 3.10.x**를 요구한다(torch/mlagents �
 | `Heuristic(actionsOut)` | 사람 조작(디버그) | **`Keyboard.current`로 채운다** (레거시 Input 막힘!) |
 
 ### 3.3 행동 공간(Action Space) 결정
-참조 예제는 연속 3개(전진·좌우 스트레이프·회전) + 이산 1개(레이저 발사)다. **고기/당근 문제엔 스트레이프·레이저가 불필요**하므로 단순화한다:
 - **연속 행동 2개**: `[0]` 전진/후진, `[1]` 좌/우 회전
 - 이산 행동 0개
 
@@ -110,7 +101,7 @@ ML-Agents Release 4는 보통 **Python 3.10.x**를 요구한다(torch/mlagents �
 - **Sphere Cast Radius / 높이 오프셋**: 캐릭터 눈높이에 맞게 조정
 
 ### 4.2 벡터 관측 (보조)
-`CollectObservations`에서 에이전트 **로컬 속도 x, z**(2개)를 추가. "지금 어디로 얼마나 빠르게 가고 있나"를 알아야 회전·정지 타이밍을 학습한다. 참조 예제도 이 두 값을 쓴다.
+`CollectObservations`에서 에이전트 **로컬 속도 x, z**(2개)를 추가. "지금 어디로 얼마나 빠르게 가고 있나"를 알아야 회전·정지 타이밍을 학습한다.
 
 ### 4.3 관측 크기 정리
 - **Ray Sensor 관측은 자동**이라 Behavior Parameters의 `Vector Observation Space Size`에 포함되지 않는다(별도 센서로 합산됨).
@@ -167,8 +158,8 @@ behaviors:
     hyperparameters:
       batch_size: 1024
       buffer_size: 10240         # batch_size의 정수배
-      learning_rate: 3.0e-4
-      beta: 5.0e-3               # 탐험(엔트로피) 강도
+      learning_rate: 5.0e-4
+      beta: 8.0e-3               # 탐험(엔트로피) 강도
       epsilon: 0.2               # PPO 클립 범위
       lambd: 0.95
       num_epoch: 3
@@ -180,7 +171,7 @@ behaviors:
       extrinsic:
         gamma: 0.99              # 미래 보상 할인율
         strength: 1.0
-    max_steps: 2000000           # 총 학습 스텝(에이전트 수만큼 빨리 소모)
+    max_steps: 200000            # 총 학습 스텝(에이전트 수만큼 빨리 소모)
     time_horizon: 64
     summary_freq: 10000          # TensorBoard 기록 주기
 ```
@@ -201,13 +192,13 @@ behaviors:
 Behavior Type을 잠시 `Heuristic Only`로 두고 Play → **키보드로 조작해 고기에 닿으면 보상 로그가 찍히는지** 확인. 여기서 태그/트리거/보상 배선을 먼저 잡는다. (학습 돌리기 전에 반드시)
 
 ### 8.2 학습 시작
-1. venv 활성화 상태에서:
+1. 가상환경 활성화 상태에서:
    `mlagents-learn week3/FoodCollector/config/foodcollector.yaml --run-id=food_run_01`
 2. 콘솔에 **"Start training by pressing the Play button in the Unity Editor"** 가 뜨면 → 에디터에서 **Play**.
 3. Behavior Type을 `Default`로 두면 Python에 연결되어 학습이 시작된다.
 4. 재시작 시 같은 run-id면 `--resume`, 처음부터면 `--force`.
 
-### 8.3 (선택) 여러 학습 영역으로 가속
+### 8.3 여러 학습 영역으로 가속
 `TrainingArea`(에이전트+음식+벽 한 세트)를 통째로 복제해 4~16개 배치하면, 같은 시간에 몇 배 많은 경험이 쌓여 학습이 빨라진다. 모든 에이전트의 Behavior Name이 같으면 하나의 정책을 공유해 함께 학습한다. (영역끼리 겹치지 않게 위치만 분리)
 
 ---
