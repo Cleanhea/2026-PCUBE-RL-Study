@@ -2,9 +2,7 @@
 
 Rogue 캐릭터가 스스로 돌아다니며 **고기(Meat)는 먹고 당근(Carrot)은 피하도록** 강화학습으로 훈련시키는 전체 절차. 코드는 나중에 작성하고, 이 문서는 "무엇을 · 어떤 순서로 · 왜" 하는지 설명하는 계획서다.
 
-> 이 계획은 현재 프로젝트 실제 상태를 확인하고 작성했다.
 > - Unity `com.unity.ml-agents 4.0.3` **이미 설치됨** (별도 패키지 설치 불필요)
-> - 참조 repo: `~/Documents/Projects/Unity/ml-agents` (`release/4.0.0` 브랜치, python `mlagents 1.2.0.dev0`)
 > - 씬(`MainScene`): `TrainingArea / Court / Floor`, `wall1~4`, `Rogue`(태그 `Player`), `Meat`×8, `Carrotfbx`×5
 > - 움직임은 `PlayerController.cs`(tank control, New Input System)로 이미 동작 — 이 로직을 재사용한다
 > - 태그는 `Player`만 존재. `food` / `badFood` / `wall` 태그는 **아직 없음**
@@ -83,7 +81,6 @@ ML-Agents Release 4는 보통 **Python 3.10.x**를 요구한다(torch/mlagents �
 | `Heuristic(actionsOut)` | 사람 조작(디버그) | **`Keyboard.current`로 채운다** (레거시 Input 막힘!) |
 
 ### 3.3 행동 공간(Action Space) 결정
-참조 예제는 연속 3개(전진·좌우 스트레이프·회전) + 이산 1개(레이저 발사)다. **고기/당근 문제엔 스트레이프·레이저가 불필요**하므로 단순화한다:
 - **연속 행동 2개**: `[0]` 전진/후진, `[1]` 좌/우 회전
 - 이산 행동 0개
 
@@ -180,7 +177,7 @@ behaviors:
       extrinsic:
         gamma: 0.99              # 미래 보상 할인율
         strength: 1.0
-    max_steps: 2000000           # 총 학습 스텝(에이전트 수만큼 빨리 소모)
+    max_steps: 200000            # 총 학습 스텝(에이전트 수만큼 빨리 소모)
     time_horizon: 64
     summary_freq: 10000          # TensorBoard 기록 주기
 ```
