@@ -26,8 +26,8 @@
 |---|---|---|---|---|
 | **week1** | RL 이론 + 셋업 | MDP · 가치함수 · DQN · PPO | [강화학습 기초](week1/이론-강화학습_기초.md) · [DQN](week1/이론-DQN.md) · [PPO](week1/이론-PPO.md) · [ML-Agents 셋업](week1/실습-mlagents_셋업.md) | 완료 |
 | **week2** | ML-Agents 개요 · 에이전트 설계 | 관측 · 행동 · 보상 설계 | [ML-Agents 개요](week2/이론-ml_agents_개요.md) · [에이전트 설계](week2/이론-에이전트_설계.md) · `BallDemo` (3D Ball) | 완료 |
-| **week3** | 단일 에이전트 학습 | 관측 설계 · PPO 학습 루프 | [FoodCollector 학습](week3/food_collector_training.md) · `FoodCollector` | 진행 전 |
-| **week4** | 멀티에이전트 축구 | MA-POCA · Self-Play · Curriculum | [Curriculum](week4/Curriculum.md) · [POCA](week4/POCA.md) · [Self-Play](week4/SelfPlay.md) · [SoccerBots](week4/SoccerBots.md) · `SoccerBots` | 진행 전|
+| **week3** | 단일 에이전트 학습 | 관측 설계 · PPO 학습 루프 | [FoodCollector 학습](week3/food_collector_training.md) · `FoodCollector` | 완료 |
+| **week4** | 멀티에이전트 축구 | MA-POCA · Self-Play · Curriculum | [Curriculum](week4/Curriculum.md) · [POCA](week4/POCA.md) · [Self-Play](week4/SelfPlay.md) · [SoccerBots](week4/SoccerBots.md) · `SoccerBots` | 완료 |
 | **week5** | SAC · 테트리스 에이전트 | SAC · off-policy · 보상 설계 | [SAC 이론](week5/이론-SAC.md) · [TetrisAgent 가이드](week5/TetrisAgent.md) · `TetrisAgent` | 진행 전 |
 
 
