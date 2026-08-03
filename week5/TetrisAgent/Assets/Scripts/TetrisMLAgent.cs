@@ -1,0 +1,138 @@
+using Unity.MLAgents;
+using Unity.MLAgents.Actuators;
+using Unity.MLAgents.Sensors;
+using UnityEngine;
+using Tetris;
+
+/// <summary>
+/// SAC로 테트리스를 학습하는 ML-Agents 에이전트.
+/// 로직/렌더는 TetrisCore/TetrisEnv/TetrisBoard가 담당하고, 이 클래스는
+/// (관측 → 액션 → 보상) 인터페이스만 ML-Agents에 연결한다.
+///
+/// 결정 1회 = 조각 1개 배치. Decision Requester(Period 1)와 함께 쓴다.
+/// </summary>
+public class TetrisMLAgent : Agent
+{
+    [Header("(선택) 관전용 보드 — 비우면 렌더 안 함")]
+    [SerializeField] TetrisBoard viewBoard;
+
+    [Header("환경")]
+    [Tooltip("0 = 매 에피소드 랜덤 시드. 고정하면 디버깅 시 재현 가능.")]
+    [SerializeField] int seed = 0;
+
+    [Header("보상 (SAC는 스케일에 민감 — 대략 [-1,1] 유지)")]
+    [Tooltip("조각 하나를 놓을 때마다의 생존 보상. 게임을 오래 끌게 만든다.")]
+    [SerializeField] float surviveReward = 0.01f;
+    [Tooltip("라인 클리어 보상 [0,1,2,3,4]줄. 테트리스(4줄)를 강하게 우대(비선형).")]
+    [SerializeField] float[] lineRewards = { 0f, 0.10f, 0.30f, 0.60f, 1.0f };
+    [Tooltip("게임오버 / 배치 불가(사실상 탑아웃) 페널티.")]
+    [SerializeField] float gameOverPenalty = -1f;
+
+    [Header("보드 형태 shaping (배치 후 지표 '증가분'만 벌점)")]
+    [Tooltip("새로 생긴 구멍당 벌점. 구멍은 테트리스에서 치명적이라 가장 크게.")]
+    [SerializeField] float holeWeight = 0.05f;
+    [Tooltip("최대 높이 증가당 벌점.")]
+    [SerializeField] float heightWeight = 0.01f;
+    [Tooltip("열 높이 편차(bumpiness) 증가당 벌점.")]
+    [SerializeField] float bumpinessWeight = 0.01f;
+
+    TetrisEnv env;
+    int prevHoles, prevMaxHeight, prevBumpiness;
+
+    public override void Initialize()
+    {
+        env = new TetrisEnv(seed);
+        if (viewBoard != null) viewBoard.Bind(env.Core); // 이 에이전트 보드를 화면에 렌더(입력·중력 없이)
+    }
+
+    public override void OnEpisodeBegin()
+    {
+        env.Reset();
+        // 빈 보드 기준선(모두 0). shaping은 여기서부터의 '증가분'으로 계산한다.
+        prevHoles = prevMaxHeight = prevBumpiness = 0;
+    }
+
+    public override void CollectObservations(VectorSensor sensor)
+    {
+        // 보드 점유 200 + 현재 조각 one-hot 7 + 다음 조각 one-hot 7 = 214.
+        // Behavior Parameters의 Space Size를 이 길이와 반드시 일치시킬 것.
+        foreach (float v in env.GetObservation())
+            sensor.AddObservation(v);
+    }
+
+    public override void WriteDiscreteActionMask(IDiscreteActionMask actionMask)
+    {
+        // 배치 불가능한 (열,회전)을 후보에서 제거 → 학습이 훨씬 수월.
+        // 단, 전부 마스킹하면 ML-Agents가 예외를 던진다(유효 액션 0개 금지).
+        // 유효 액션이 하나도 없으면(사실상 탑아웃) 마스킹을 건너뛰고,
+        // OnActionReceived에서 무효 배치를 게임오버로 처리한다.
+        int validCount = 0;
+        for (int a = 0; a < TetrisEnv.ActionCount; a++)
+            if (env.IsValid(a)) validCount++;
+        if (validCount == 0) return;
+
+        for (int a = 0; a < TetrisEnv.ActionCount; a++)
+            if (!env.IsValid(a)) actionMask.SetActionEnabled(0, a, false);
+    }
+
+    public override void OnActionReceived(ActionBuffers actions)
+    {
+        int a = actions.DiscreteActions[0];
+        var r = env.Step(a); // ← 조각 한 개 배치 = 한 스텝
+
+        // 무효 배치는 마스킹이 있으면 정상적으론 안 나온다. 나왔다면 놓을 곳이 없다는 뜻(탑아웃).
+        if (!r.valid)
+        {
+            AddReward(gameOverPenalty);
+            EndEpisode();
+            return;
+        }
+
+        // 1) 생존 + 라인 클리어(비선형)
+        AddReward(surviveReward);
+        AddReward(lineRewards[Mathf.Clamp(r.linesCleared, 0, lineRewards.Length - 1)]);
+
+        // 2) 보드 형태 shaping: 배치 후 지표의 '증가분'만 벌점(줄면 벌점 없음).
+        ComputeBoardFeatures(out int holes, out int maxHeight, out int bumpiness);
+        AddReward(-holeWeight * Mathf.Max(0, holes - prevHoles));
+        AddReward(-heightWeight * Mathf.Max(0, maxHeight - prevMaxHeight));
+        AddReward(-bumpinessWeight * Mathf.Max(0, bumpiness - prevBumpiness));
+        prevHoles = holes; prevMaxHeight = maxHeight; prevBumpiness = bumpiness;
+
+        if (r.gameOver)
+        {
+            AddReward(gameOverPenalty);
+            EndEpisode();
+        }
+    }
+
+    // 열별 높이(맨 위 블록 +1), 구멍 수(윗 블록 밑의 빈칸), 최대 높이, bumpiness(인접 높이차 합).
+    void ComputeBoardFeatures(out int holes, out int maxHeight, out int bumpiness)
+    {
+        var grid = env.Core.Grid;
+        holes = 0; maxHeight = 0; bumpiness = 0;
+        int prevH = 0;
+        for (int x = 0; x < TetrisCore.Width; x++)
+        {
+            int top = -1;
+            for (int y = TetrisCore.Height - 1; y >= 0; y--)
+                if (grid[x, y] != TetrisCore.Empty) { top = y; break; }
+
+            int h = top + 1;                 // 이 열의 높이
+            if (h > maxHeight) maxHeight = h;
+            for (int y = 0; y < top; y++)    // top 아래의 빈칸 = 구멍
+                if (grid[x, y] == TetrisCore.Empty) holes++;
+            if (x > 0) bumpiness += Mathf.Abs(h - prevH);
+            prevH = h;
+        }
+    }
+
+    // 사람이 키로 테스트할 때만(Behavior Type = Heuristic Only). 학습엔 불필요 — 첫 유효 액션 선택.
+    public override void Heuristic(in ActionBuffers actionsOut)
+    {
+        var d = actionsOut.DiscreteActions;
+        for (int a = 0; a < TetrisEnv.ActionCount; a++)
+            if (env.IsValid(a)) { d[0] = a; return; }
+        d[0] = 0;
+    }
+}
