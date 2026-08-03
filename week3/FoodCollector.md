@@ -158,8 +158,8 @@ behaviors:
     hyperparameters:
       batch_size: 1024
       buffer_size: 10240         # batch_size의 정수배
-      learning_rate: 3.0e-4
-      beta: 5.0e-3               # 탐험(엔트로피) 강도
+      learning_rate: 5.0e-4
+      beta: 8.0e-3               # 탐험(엔트로피) 강도
       epsilon: 0.2               # PPO 클립 범위
       lambd: 0.95
       num_epoch: 3
@@ -198,7 +198,7 @@ Behavior Type을 잠시 `Heuristic Only`로 두고 Play → **키보드로 조�
 3. Behavior Type을 `Default`로 두면 Python에 연결되어 학습이 시작된다.
 4. 재시작 시 같은 run-id면 `--resume`, 처음부터면 `--force`.
 
-### 8.3 (선택) 여러 학습 영역으로 가속
+### 8.3 여러 학습 영역으로 가속
 `TrainingArea`(에이전트+음식+벽 한 세트)를 통째로 복제해 4~16개 배치하면, 같은 시간에 몇 배 많은 경험이 쌓여 학습이 빨라진다. 모든 에이전트의 Behavior Name이 같으면 하나의 정책을 공유해 함께 학습한다. (영역끼리 겹치지 않게 위치만 분리)
 
 ---
