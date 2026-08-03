@@ -25,8 +25,12 @@ public class TetrisMLAgent : Agent
     [SerializeField] float surviveReward = 0.01f;
     [Tooltip("라인 클리어 보상 [0,1,2,3,4]줄. 테트리스(4줄)를 강하게 우대(비선형).")]
     [SerializeField] float[] lineRewards = { 0f, 0.10f, 0.30f, 0.60f, 1.0f };
-    [Tooltip("게임오버 / 배치 불가(사실상 탑아웃) 페널티.")]
+    [Tooltip("게임오버 / 배치 불가(사실상 탑아웃) 기본 페널티.")]
     [SerializeField] float gameOverPenalty = -1f;
+    [Tooltip("이 조각 수 안에 게임오버되면 '빨리 죽을수록' 추가 벌점(0에 가까울수록 최대). 빠른 자살 전략 차단.")]
+    [SerializeField] int earlyGameOverSteps = 20;
+    [Tooltip("빠른 게임오버 추가 벌점의 최대 크기(0개 배치 시). 클수록 일찍 죽는 걸 강하게 억제.")]
+    [SerializeField] float earlyGameOverWeight = 2f;
 
     [Header("보드 형태 shaping (배치 후 지표 '증가분'만 벌점)")]
     [Tooltip("새로 생긴 구멍당 벌점. 구멍은 테트리스에서 치명적이라 가장 크게.")]
@@ -38,6 +42,8 @@ public class TetrisMLAgent : Agent
 
     TetrisEnv env;
     int prevHoles, prevMaxHeight, prevBumpiness;
+    int piecesThisEpisode;   // 이번 에피소드에 성공적으로 놓은 조각 수 (빠른 게임오버 판정용)
+    readonly int[] clearCounts = new int[5]; // 이번 에피소드 라인 클리어 횟수: [1]싱글 [2]더블 [3]트리플 [4]테트리스
 
     public override void Initialize()
     {
@@ -50,6 +56,8 @@ public class TetrisMLAgent : Agent
         env.Reset();
         // 빈 보드 기준선(모두 0). shaping은 여기서부터의 '증가분'으로 계산한다.
         prevHoles = prevMaxHeight = prevBumpiness = 0;
+        piecesThisEpisode = 0;
+        System.Array.Clear(clearCounts, 0, clearCounts.Length);
     }
 
     public override void CollectObservations(VectorSensor sensor)
@@ -83,14 +91,17 @@ public class TetrisMLAgent : Agent
         // 무효 배치는 마스킹이 있으면 정상적으론 안 나온다. 나왔다면 놓을 곳이 없다는 뜻(탑아웃).
         if (!r.valid)
         {
-            AddReward(gameOverPenalty);
+            ApplyGameOverPenalty();
             EndEpisode();
             return;
         }
 
+        piecesThisEpisode++;
+
         // 1) 생존 + 라인 클리어(비선형)
         AddReward(surviveReward);
         AddReward(lineRewards[Mathf.Clamp(r.linesCleared, 0, lineRewards.Length - 1)]);
+        if (r.linesCleared > 0) clearCounts[Mathf.Clamp(r.linesCleared, 1, 4)]++;
 
         // 2) 보드 형태 shaping: 배치 후 지표의 '증가분'만 벌점(줄면 벌점 없음).
         ComputeBoardFeatures(out int holes, out int maxHeight, out int bumpiness);
@@ -101,9 +112,28 @@ public class TetrisMLAgent : Agent
 
         if (r.gameOver)
         {
-            AddReward(gameOverPenalty);
+            ApplyGameOverPenalty();
             EndEpisode();
         }
+    }
+
+    // 게임오버 벌점 = 기본 + '빨리 죽을수록' 커지는 추가 벌점.
+    // 놓은 조각 수가 earlyGameOverSteps 미만이면, 적을수록 최대 earlyGameOverWeight 까지 선형 가중.
+    // → 한 줄로 빨리 쌓아 자살하는 지역 최적(누적 shaping 벌점 회피)을 차단한다.
+    void ApplyGameOverPenalty()
+    {
+        // 에피소드 종료 시점의 레벨/라인을 텐서보드에 기록(Metrics/ 아래에 뜬다).
+        var stats = Academy.Instance.StatsRecorder;
+        stats.Add("Tetris/Level", env.Core.Level);
+        stats.Add("Tetris/Lines", env.Core.Lines);
+        // 에피소드당 종류별 라인 클리어 횟수 → 텐서보드에서 네 그래프를 겹쳐 비교.
+        stats.Add("Clears/Single", clearCounts[1]);
+        stats.Add("Clears/Double", clearCounts[2]);
+        stats.Add("Clears/Triple", clearCounts[3]);
+        stats.Add("Clears/Tetris", clearCounts[4]);
+        AddReward(gameOverPenalty);
+        if (earlyGameOverSteps > 0 && piecesThisEpisode < earlyGameOverSteps)
+            AddReward(-earlyGameOverWeight * (earlyGameOverSteps - piecesThisEpisode) / (float)earlyGameOverSteps);
     }
 
     // 열별 높이(맨 위 블록 +1), 구멍 수(윗 블록 밑의 빈칸), 최대 높이, bumpiness(인접 높이차 합).
