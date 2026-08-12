@@ -1,5 +1,7 @@
+using System.Collections;
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
+using Unity.MLAgents.Policies;
 using Unity.MLAgents.Sensors;
 using UnityEngine;
 using Tetris;
@@ -32,6 +34,12 @@ public class TetrisMLAgent : Agent
     [Tooltip("빠른 게임오버 추가 벌점의 최대 크기(0개 배치 시). 클수록 일찍 죽는 걸 강하게 억제.")]
     [SerializeField] float earlyGameOverWeight = 2f;
 
+    [Header("관전 애니메이션 (추론 시 조각 이동을 눈으로 보기)")]
+    [Tooltip("켜면 추론 중 조각을 목표 위치까지 한 칸씩 움직여 보여준다. 학습(Default)엔 영향 없음.")]
+    [SerializeField] bool animatePlacement = false;
+    [Tooltip("애니메이션 한 스텝(회전/이동/낙하 한 칸) 사이 대기(초). 작을수록 빠름.")]
+    [SerializeField] float animStepDelay = 0.05f;
+
     [Header("보드 형태 shaping (배치 후 지표 '증가분'만 벌점)")]
     [Tooltip("새로 생긴 구멍당 벌점. 구멍은 테트리스에서 치명적이라 가장 크게.")]
     [SerializeField] float holeWeight = 0.05f;
@@ -48,7 +56,22 @@ public class TetrisMLAgent : Agent
     public override void Initialize()
     {
         env = new TetrisEnv(seed);
-        if (viewBoard != null) viewBoard.Bind(env.Core); // 이 에이전트 보드를 화면에 렌더(입력·중력 없이)
+        if (viewBoard != null)
+        {
+            viewBoard.Bind(env.Core); // 이 에이전트 보드를 화면에 렌더(입력·중력 없이)
+            // 추론(Inference Only) 모드면 HUD 에 표시.
+            var bp = GetComponent<BehaviorParameters>();
+            if (bp != null && bp.BehaviorType == BehaviorType.InferenceOnly)
+                viewBoard.statusLabel = "INFERENCE";
+        }
+
+        // 애니메이션 모드는 배치가 끝날 때마다 직접 다음 결정을 요청한다(자체 페이싱).
+        // 그래서 주기적으로 결정을 던지는 DecisionRequester 는 꺼서 중복 요청을 막는다.
+        if (animatePlacement)
+        {
+            var dr = GetComponent<DecisionRequester>();
+            if (dr != null) dr.enabled = false;
+        }
     }
 
     public override void OnEpisodeBegin()
@@ -58,6 +81,8 @@ public class TetrisMLAgent : Agent
         prevHoles = prevMaxHeight = prevBumpiness = 0;
         piecesThisEpisode = 0;
         System.Array.Clear(clearCounts, 0, clearCounts.Length);
+
+        if (animatePlacement) RequestDecision(); // 자체 페이싱: 첫(또는 리셋 후) 조각 결정 요청
     }
 
     public override void CollectObservations(VectorSensor sensor)
@@ -86,6 +111,10 @@ public class TetrisMLAgent : Agent
     public override void OnActionReceived(ActionBuffers actions)
     {
         int a = actions.DiscreteActions[0];
+
+        // 관전 모드: 즉시 배치 대신 목표까지 한 칸씩 움직여 보여준다(보상 로직 생략 — 추론 시각화 전용).
+        if (animatePlacement) { StartCoroutine(AnimatePlacement(a)); return; }
+
         var r = env.Step(a); // ← 조각 한 개 배치 = 한 스텝
 
         // 무효 배치는 마스킹이 있으면 정상적으론 안 나온다. 나왔다면 놓을 곳이 없다는 뜻(탑아웃).
@@ -115,6 +144,21 @@ public class TetrisMLAgent : Agent
             ApplyGameOverPenalty();
             EndEpisode();
         }
+    }
+
+    // 관전용: 조각을 목표 위치까지 한 칸씩 움직여 배치. 끝나면 다음 결정을 요청해 루프를 잇는다.
+    IEnumerator AnimatePlacement(int action)
+    {
+        if (!env.Core.BeginPlacement(action % TetrisEnv.Columns, action / TetrisEnv.Columns))
+        {
+            EndEpisode();   // 배치 불가(탑아웃) → OnEpisodeBegin 이 다음 결정 요청
+            yield break;
+        }
+        var wait = new WaitForSeconds(animStepDelay);
+        while (!env.Core.StepPlacement()) yield return wait;
+
+        if (env.Core.GameOver) EndEpisode();  // OnEpisodeBegin 이 다음 결정 요청
+        else RequestDecision();               // 다음 조각 결정
     }
 
     // 게임오버 벌점 = 기본 + '빨리 죽을수록' 커지는 추가 벌점.
