@@ -236,7 +236,7 @@ namespace RacingBotCup.Vehicle
             trail.endWidth = m_Width;
             trail.minVertexDistance = k_MinVertexDistance;
             trail.numCapVertices = 0;
-            trail.alignment = LineAlignment.TransformZ;
+            trail.alignment = LineAlignment.View;
             trail.textureMode = LineTextureMode.Stretch;
             trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             trail.receiveShadows = false;
