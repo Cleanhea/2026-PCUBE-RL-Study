@@ -1,0 +1,231 @@
+using RacingBotCup.Agent;
+using RacingBotCup.Eval;
+using RacingBotCup.Track;
+using RacingBotCup.Vehicle;
+using Unity.InferenceEngine;
+using Unity.MLAgents.Policies;
+using UnityEngine;
+
+namespace RacingBotCup.Racing
+{
+    /// <summary>A car plus the driver bolted into it, ready to be pointed at a circuit.</summary>
+    public sealed class RacerRig
+    {
+        /// <summary>Where an idle rig waits while another one is being timed.</summary>
+        static readonly Vector3 k_ParkingPosition = new Vector3(0f, -2000f, 0f);
+
+        public CarController Car { get; }
+
+        public IDriver Driver { get; }
+
+        public GameObject Root => Car.gameObject;
+
+        public RacerRig(CarController car, IDriver driver)
+        {
+            Car = car;
+            Driver = driver;
+        }
+
+        /// <summary>Moves the rig out of the way and freezes it.</summary>
+        public void Park()
+        {
+            Car.ResetTo(k_ParkingPosition, Quaternion.identity);
+            Car.Body.isKinematic = true;
+        }
+
+        /// <summary>
+        /// Puts the car on the start line. The model already carries its world position — parallel
+        /// environments rebase the whole circuit rather than offsetting every query.
+        /// </summary>
+        public RaceContext PlaceOnTrack(TrackModel model)
+        {
+            Car.Body.isKinematic = false;
+            Car.SurfaceProvider = model;
+
+            var startPose = model.GetStartPose(RaceRules.StartHeightOffset);
+            Car.ResetTo(startPose.position, startPose.rotation);
+
+            var checkpoints = new CheckpointRing(
+                model,
+                RaceRules.CheckpointCount,
+                RaceRules.CheckpointLateralTolerance);
+
+            var context = new RaceContext(Car, model, checkpoints);
+            Driver.Bind(context);
+
+            // Gives the HUD something to read. Added here rather than baked into the car prefab so
+            // that a car which is not on a circuit has no clock to show.
+            var clock = Car.GetComponent<RaceClock>() ?? Car.gameObject.AddComponent<RaceClock>();
+            clock.Bind(context);
+
+            return context;
+        }
+
+        /// <summary>
+        /// Renders the car as a translucent ghost. Used for the baseline, which shares the circuit
+        /// with the competitor's car so the two can be compared at a glance.
+        /// </summary>
+        public void MakeGhost(float alpha = 0.35f)
+        {
+            foreach (var renderer in Root.GetComponentsInChildren<Renderer>(true))
+            {
+                var materials = renderer.materials;
+                for (var i = 0; i < materials.Length; i++)
+                {
+                    materials[i] = MakeTransparent(materials[i], alpha);
+                }
+
+                renderer.materials = materials;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+        }
+
+        static Material MakeTransparent(Material source, float alpha)
+        {
+            var copy = new Material(source);
+
+            // URP's Lit shader switches to the transparent pass through these four properties
+            // together; setting the colour alone leaves it rendering fully opaque.
+            copy.SetFloat("_Surface", 1f);
+            copy.SetFloat("_Blend", 0f);
+            copy.SetFloat("_ZWrite", 0f);
+            copy.SetOverrideTag("RenderType", "Transparent");
+            copy.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            copy.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            copy.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            copy.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            copy.DisableKeyword("_ALPHATEST_ON");
+
+            foreach (var property in new[] { "_BaseColor", "_Color" })
+            {
+                if (copy.HasProperty(property))
+                {
+                    var colour = copy.GetColor(property);
+                    colour.a = alpha;
+                    copy.SetColor(property, colour);
+                }
+            }
+
+            return copy;
+        }
+    }
+
+    /// <summary>
+    /// Assembles racers from prefabs.
+    ///
+    /// The car comes from a baked prefab so competitors can see and inspect it, and the agent is a
+    /// separate prefab they own — their sensors, their observation code, their BehaviorParameters.
+    /// Attaching the agent as a child of the sealed car keeps the physics identical for everyone
+    /// while leaving the sensor rig completely open.
+    ///
+    /// ML-Agents pieces are wired while the GameObject is deactivated on purpose:
+    /// <c>Agent.OnEnable</c> snapshots its sensors and brain parameters once, and a component on a
+    /// live GameObject enables immediately.
+    /// </summary>
+    public static class RacerBuilder
+    {
+        public static RacerRig BuildBaseline(GameObject carPrefab, Transform parent = null)
+        {
+            var car = InstantiateCar(carPrefab, parent, "BaselineCar");
+            if (car == null)
+            {
+                return null;
+            }
+
+            var bot = car.gameObject.AddComponent<BaselineBot>();
+            return new RacerRig(car, bot);
+        }
+
+        /// <param name="agentPrefab">
+        /// The competitor's agent: a <see cref="RacerAgent"/> subclass with BehaviorParameters and
+        /// whatever sensors they chose. Instantiated as a child of the car at its origin.
+        /// </param>
+        /// <param name="fallbackBehavior">
+        /// What to do when no model is supplied. Evaluation wants <c>HeuristicOnly</c> so the scene
+        /// stays drivable by hand; training must use <c>Default</c>, which is what connects the
+        /// agent to the Python trainer.
+        /// </param>
+        public static RacerRig BuildAgent(
+            GameObject carPrefab,
+            GameObject agentPrefab,
+            ModelAsset model,
+            bool manualStepping = true,
+            Transform parent = null,
+            BehaviorType fallbackBehavior = BehaviorType.HeuristicOnly)
+        {
+            var car = InstantiateCar(carPrefab, parent, "AgentCar");
+            if (car == null)
+            {
+                return null;
+            }
+
+            if (agentPrefab == null)
+            {
+                Debug.LogError("[RacingBotCup] No agent prefab supplied. Assign one built from RacerAgent.");
+                return null;
+            }
+
+            var agentObject = Object.Instantiate(agentPrefab, car.transform);
+            agentObject.name = "Agent";
+            agentObject.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+            agentObject.SetActive(false);
+
+            var agent = agentObject.GetComponent<RacerAgent>();
+            if (agent == null)
+            {
+                Debug.LogError($"[RacingBotCup] '{agentPrefab.name}' has no RacerAgent component on its root.");
+                Object.Destroy(car.gameObject);
+                return null;
+            }
+
+            var behavior = agentObject.GetComponent<BehaviorParameters>()
+                           ?? agentObject.AddComponent<BehaviorParameters>();
+            behavior.DeterministicInference = true;
+
+            if (model != null)
+            {
+                behavior.Model = model;
+                behavior.BehaviorType = BehaviorType.InferenceOnly;
+            }
+            else
+            {
+                behavior.BehaviorType = fallbackBehavior;
+            }
+
+            agent.Configure(manualStepping);
+
+            var layer = RacingLayers.VehicleLayer;
+            if (layer >= 0)
+            {
+                foreach (var child in agentObject.GetComponentsInChildren<Transform>(true))
+                {
+                    child.gameObject.layer = layer;
+                }
+            }
+
+            agentObject.SetActive(true);
+            return new RacerRig(car, agent);
+        }
+
+        static CarController InstantiateCar(GameObject carPrefab, Transform parent, string name)
+        {
+            if (carPrefab == null)
+            {
+                Debug.LogError("[RacingBotCup] No car prefab supplied. Run RacingBotCup > Rebuild Prefabs.");
+                return null;
+            }
+
+            var instance = Object.Instantiate(carPrefab, parent);
+            instance.name = name;
+
+            var car = instance.GetComponent<CarController>();
+            if (car == null)
+            {
+                Debug.LogError($"[RacingBotCup] '{carPrefab.name}' has no CarController. Rebuild the prefabs.");
+                Object.Destroy(instance);
+            }
+
+            return car;
+        }
+    }
+}

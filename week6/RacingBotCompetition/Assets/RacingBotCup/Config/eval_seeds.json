@@ -1,0 +1,16 @@
+{
+  "Id": "public-v4",
+  "Description": "RacingBot Cup public evaluation seeds — ten circuits, one per evaluation environment. Fixed for the whole event; the finals use private tracks. Each seed produces a fully valid circuit within three attempts, spread across 843-1986 m and 7-13 sections with a mix of hairpins, chicanes and esses.",
+  "Seeds": [
+    3248,
+    3061,
+    3225,
+    3307,
+    3033,
+    3171,
+    3099,
+    3009,
+    3194,
+    3148
+  ]
+}

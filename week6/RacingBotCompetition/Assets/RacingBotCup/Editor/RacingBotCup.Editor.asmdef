@@ -1,0 +1,22 @@
+{
+    "name": "RacingBotCup.Editor",
+    "rootNamespace": "RacingBotCup.EditorTools",
+    "references": [
+        "RacingBotCup.Runtime",
+        "Unity.ML-Agents",
+        "Unity.Splines",
+        "Unity.Mathematics",
+        "Unity.InferenceEngine"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

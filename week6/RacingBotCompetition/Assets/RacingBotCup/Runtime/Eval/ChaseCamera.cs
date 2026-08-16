@@ -1,0 +1,94 @@
+using RacingBotCup.Vehicle;
+using UnityEngine;
+
+namespace RacingBotCup.Eval
+{
+    /// <summary>
+    /// Follows whichever car is currently being timed, so a run can actually be watched.
+    ///
+    /// The harness keeps both cars loaded and parks the idle one far below the circuit, so the
+    /// camera picks its subject by height rather than by name — that way it switches automatically
+    /// from the baseline lap to the policy lap without the session having to tell it anything.
+    ///
+    /// Purely observational: it runs in LateUpdate and touches nothing the simulation reads, so
+    /// watching a run cannot change its result.
+    /// </summary>
+    public sealed class ChaseCamera : MonoBehaviour
+    {
+        [Tooltip("Metres behind the car.")]
+        [SerializeField] float m_Distance = 12f;
+
+        [Tooltip("Metres above the car.")]
+        [SerializeField] float m_Height = 5f;
+
+        [Tooltip("Metres ahead of the car to aim at.")]
+        [SerializeField] float m_LookAhead = 8f;
+
+        [Tooltip("0 = snap instantly, higher = smoother. Seconds to catch up.")]
+        [SerializeField] float m_Smoothing = 0.18f;
+
+        [Tooltip("Turn off to keep the fixed overview camera instead.")]
+        // Not named m_Enabled: MonoBehaviour already serialises a field by that name, and Unity
+        // rejects the whole component when a subclass shadows it.
+        [SerializeField] bool m_Follow = true;
+
+        CarController m_Target;
+        Vector3 m_Velocity;
+        float m_NextSearch;
+
+        /// <summary>The car currently being followed, so other displays can agree with the view.</summary>
+        public CarController Target => m_Target;
+
+        void LateUpdate()
+        {
+            if (!m_Follow)
+            {
+                return;
+            }
+
+            AcquireTarget();
+            if (m_Target == null)
+            {
+                return;
+            }
+
+            var car = m_Target.transform;
+            var desired = car.position - car.forward * m_Distance + Vector3.up * m_Height;
+
+            transform.position = m_Smoothing > 0f
+                ? Vector3.SmoothDamp(transform.position, desired, ref m_Velocity, m_Smoothing)
+                : desired;
+
+            transform.LookAt(car.position + car.forward * m_LookAhead + Vector3.up * 1.5f);
+        }
+
+        /// <summary>
+        /// Picks the car that is actually on the circuit. Re-checked a few times a second because
+        /// the harness swaps cars between laps and destroys them between seeds.
+        /// </summary>
+        void AcquireTarget()
+        {
+            var stillValid = m_Target != null && m_Target.transform.position.y > -100f;
+            if (stillValid && Time.unscaledTime < m_NextSearch)
+            {
+                return;
+            }
+
+            m_NextSearch = Time.unscaledTime + 0.25f;
+
+            foreach (var car in FindObjectsByType<CarController>(FindObjectsSortMode.None))
+            {
+                if (car.transform.position.y > -100f)
+                {
+                    m_Target = car;
+                    return;
+                }
+            }
+
+            if (!stillValid)
+            {
+                m_Target = null;
+            }
+        }
+    }
+}
