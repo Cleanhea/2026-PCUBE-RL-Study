@@ -1,14 +1,4 @@
-# RacingBot Cup — 샘플 에이전트 학습 설정 (PPO)
-#
-# behavior 이름 'Racer'는 RacerBuilder.BehaviorName과 일치해야 합니다. 바꾸면 트레이너가
-# 에이전트를 찾지 못합니다.
-#
-# 실행:
-#   mlagents-learn week6/config/racer_ppo.yaml --run-id=racer-01
-#   (그 다음 Unity에서 Training 씬을 Play)
-#
-# 이 값들은 "일단 완주하는 에이전트"를 얻기 위한 출발점입니다. 하이퍼파라미터는 전부
-# 자유이므로(기획서 §3) 여기서부터 바꿔 가며 실험하세요.
+
 
 behaviors:
   Racer:
@@ -25,7 +15,6 @@ behaviors:
       learning_rate_schedule: linear
 
     network_settings:
-      # 관측 스케일이 항목마다 다르므로 정규화를 켜 둡니다.
       normalize: true
       hidden_units: 256
       num_layers: 3
@@ -33,18 +22,12 @@ behaviors:
 
     reward_signals:
       extrinsic:
-        # 랩 완주 보상이 한참 뒤에 오므로 감가율을 높게 잡습니다.
         gamma: 0.995
         strength: 1.0
 
     keep_checkpoints: 5
     checkpoint_interval: 500000
-    max_steps: 5000000
-    # 한 랩이 수천 스텝이라 time_horizon을 넉넉히 둡니다.
+    max_steps: 2000000
     time_horizon: 1000
     summary_freq: 20000
 
-# 참고 — 학습 속도를 올리려면:
-#   1) Training 씬의 TrainingArena를 여러 개 복제해 병렬 환경을 만드세요.
-#   2) mlagents-learn에 --num-envs 를 쓰려면 학습용 빌드가 필요합니다.
-#   3) Time Scale은 mlagents-learn --time-scale 로 조절합니다 (물리 안정성상 20 이하 권장).

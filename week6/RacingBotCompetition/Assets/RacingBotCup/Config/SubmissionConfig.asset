@@ -12,6 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 293f63317edcb7946976dd3a50d6ec42, type: 3}
   m_Name: SubmissionConfig
   m_EditorClassIdentifier: RacingBotCup.Runtime::RacingBotCup.Eval.SubmissionConfig
-  FormUrl: 
-  ParticipantEntryId: 
-  PayloadEntryId: 
+  FormUrl: https://docs.google.com/forms/d/e/1FAIpQLSf4iKEgB7HFtJdlZ1AZj8ptgS7g-CgX4cp-V-at-hrbf9eBLw/formResponse
+  ParticipantEntryId: entry.1234217471
+  PayloadEntryId: entry.1408013898

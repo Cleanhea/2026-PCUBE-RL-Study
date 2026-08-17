@@ -12,21 +12,29 @@ using UnityEngine;
 namespace RacingBotCup.Eval
 {
     /// <summary>
-    /// Runs the whole evaluation at once: every circuit in the seed set laid out on a grid, each
-    /// with the baseline and the competitor's car running side by side.
+    /// Runs the whole evaluation, in one of two shapes depending on <see cref="Request.WatchMode"/>.
     ///
-    /// Racing them together rather than in separate passes halves the wall clock, and — the part
-    /// that actually matters — makes the comparison visible. You can watch where the policy gains
-    /// on the bot and where it throws it away. Collisions between the two are disabled, so the
-    /// baseline is effectively a ghost: it shares the circuit without ever affecting the run.
+    /// Unwatched, every circuit in the seed set runs at once, laid out on a grid — racing them
+    /// together rather than in separate passes cuts the wall clock roughly tenfold, and nobody is
+    /// looking, so there is nothing to lose by not being able to follow any one of them.
+    ///
+    /// Watched, circuits run one at a time in seed order instead: ten cars racing simultaneously
+    /// would leave nine of them permanently off camera, so there is nothing gained by parallelising
+    /// what only one viewer is watching. Each circuit still puts the baseline and the competitor's
+    /// car through it side by side — collisions between the two are disabled, so the baseline is
+    /// effectively a ghost sharing the circuit without ever affecting the run — and the chase camera
+    /// follows the competitor's car, not the ghost.
     /// </summary>
     public sealed class EvaluationRunner : MonoBehaviour
     {
         /// <summary>Spacing between environments. Comfortably wider than the largest circuit.</summary>
         const float k_EnvironmentSpacing = 1600f;
 
+        /// <summary>How many physics ticks the unwatched path advances between yields. Watched runs
+        /// are paced to real time instead (see <see cref="StepBatch"/>'s <c>realtime</c> parameter),
+        /// so this has no equivalent there.</summary>
         const int k_StepsPerYield = 200;
-        const int k_WatchStepsPerYield = 1;
+
         const float k_SettleSeconds = 0.5f;
 
         public sealed class Request
@@ -36,6 +44,7 @@ namespace RacingBotCup.Eval
             public ModelAsset Model;
             public SeedSet Seeds;
             public TrackMaterials Materials;
+            public TrackPropCatalogue Props;
             public string ParticipantId = "unknown";
             public string Note;
 
@@ -111,90 +120,71 @@ namespace RacingBotCup.Eval
             var arena = new GameObject("EvaluationArena");
             var environments = new List<Environment>();
             var dt = CarSpec.FixedDeltaTime;
-            var stepsPerYield = request.WatchMode ? k_WatchStepsPerYield : k_StepsPerYield;
 
             try
             {
                 var seeds = request.Seeds.Seeds;
-                for (var i = 0; i < seeds.Length; i++)
+
+                if (request.WatchMode)
                 {
-                    var environment = BuildEnvironment(request, seeds[i], GridPosition(i), arena.transform);
-                    if (environment == null)
+                    // One circuit at a time, in seed order. Finished circuits are left sitting where
+                    // they raced rather than torn down — that keeps this loop's cleanup identical to
+                    // the unwatched path below (one sweep over everything ever built, once, at the
+                    // very end) instead of needing its own per-seed teardown.
+                    for (var i = 0; i < seeds.Length; i++)
                     {
-                        onError?.Invoke("Could not build an environment. Check the console.");
-                        yield break;
-                    }
-
-                    environments.Add(environment);
-                }
-
-                Physics.SyncTransforms();
-                Settle(environments, dt);
-
-                foreach (var environment in environments)
-                {
-                    environment.BaselineContext.Reset();
-                    environment.ChallengerContext.Reset();
-                    environment.Baseline.Driver.BeginRun();
-                    environment.Challenger.Driver.BeginRun();
-                }
-
-                var maxSteps = Mathf.CeilToInt(RaceRules.BaselineTimeoutSeconds / dt);
-
-                for (var step = 0; step < maxSteps; step++)
-                {
-                    var finished = 0;
-                    var anyDecision = false;
-
-                    foreach (var environment in environments)
-                    {
-                        AdvanceCar(environment, isBaseline: true, dt, ref anyDecision);
-                        AdvanceCar(environment, isBaseline: false, dt, ref anyDecision);
-
-                        if (environment.Done)
+                        var environment = BuildEnvironment(request, seeds[i], GridPosition(i), arena.transform);
+                        if (environment == null)
                         {
-                            finished++;
-                        }
-                    }
-
-                    // One Academy step for every agent that asked, no matter how many are running.
-                    if (anyDecision)
-                    {
-                        Academy.Instance.EnvironmentStep();
-                    }
-
-                    foreach (var environment in environments)
-                    {
-                        if (environment.BaselineResult == null)
-                        {
-                            environment.Baseline.Car.Step(dt);
+                            onError?.Invoke("Could not build an environment. Check the console.");
+                            yield break;
                         }
 
-                        if (environment.ChallengerResult == null)
-                        {
-                            environment.Challenger.Car.Step(dt);
-                        }
-                    }
+                        environments.Add(environment);
 
-                    Physics.Simulate(dt);
+                        var batch = new List<Environment> { environment };
+                        Physics.SyncTransforms();
+                        Settle(batch, dt);
+                        BeginBatch(batch);
 
-                    if (finished >= environments.Count)
-                    {
-                        break;
-                    }
+                        var seedsAlreadyDone = i;
+                        yield return StepBatch(batch, dt, realtime: true, elapsed =>
+                            onProgress?.Invoke(new Progress(seedsAlreadyDone, seeds.Length, elapsed)));
 
-                    if (step % stepsPerYield == stepsPerYield - 1)
-                    {
-                        onProgress?.Invoke(new Progress(finished, environments.Count, step * dt));
-                        yield return null;
+                        FillTimeouts(batch);
+
+                        // Left sitting rather than destroyed (see above), so the chase camera needs
+                        // its own way to tell "just finished" apart from "still racing" — otherwise,
+                        // once several finished cars have piled up, FindObjectsByType's unspecified
+                        // ordering can hand it any of them on its next periodic re-search, and the
+                        // camera cuts to wherever that one stopped, 1,600 m away.
+                        environment.Baseline.Car.IsRacing = false;
+                        environment.Challenger.Car.IsRacing = false;
                     }
                 }
-
-                // Anything still running when the clock ran out timed out.
-                foreach (var environment in environments)
+                else
                 {
-                    environment.BaselineResult ??= Timeout(environment, environment.BaselineContext, "BaselineBot");
-                    environment.ChallengerResult ??= Timeout(environment, environment.ChallengerContext, "Agent");
+                    for (var i = 0; i < seeds.Length; i++)
+                    {
+                        var environment = BuildEnvironment(request, seeds[i], GridPosition(i), arena.transform);
+                        if (environment == null)
+                        {
+                            onError?.Invoke("Could not build an environment. Check the console.");
+                            yield break;
+                        }
+
+                        environments.Add(environment);
+                    }
+
+                    Physics.SyncTransforms();
+                    Settle(environments, dt);
+                    BeginBatch(environments);
+
+                    yield return StepBatch(environments, dt, realtime: false, elapsed =>
+                        onProgress?.Invoke(new Progress(CountDone(environments), environments.Count, elapsed)),
+                        stepsPerYield: k_StepsPerYield);
+
+                    FillTimeouts(environments);
                 }
             }
             finally
@@ -226,6 +216,123 @@ namespace RacingBotCup.Eval
         // ------------------------------------------------------------------
         // Per-step advance
         // ------------------------------------------------------------------
+
+        static void BeginBatch(List<Environment> batch)
+        {
+            foreach (var environment in batch)
+            {
+                environment.BaselineContext.Reset();
+                environment.ChallengerContext.Reset();
+                environment.Baseline.Driver.BeginRun();
+                environment.Challenger.Driver.BeginRun();
+            }
+        }
+
+        /// <summary>
+        /// Steps every environment in the batch together, once per tick, until all of them are done
+        /// or the shared timeout elapses. A batch of everything is what makes unwatched runs fast; a
+        /// batch of one is what makes watched runs sequential — the stepping itself does not know or
+        /// care which.
+        /// </summary>
+        /// <param name="realtime">
+        /// Paces one tick to one wall-clock <paramref name="dt"/> so a watched lap takes as long to
+        /// watch as it would to drive. <c>Physics.Simulate</c> advances simulated time instantly and
+        /// costs almost no real time to call, so without this a watched run goes exactly as fast as
+        /// the editor can render frames — which in a light scene is a lot faster than the lap itself.
+        /// </param>
+        IEnumerator StepBatch(
+            List<Environment> batch, float dt, bool realtime, Action<float> onTick, int stepsPerYield = 1)
+        {
+            var maxSteps = Mathf.CeilToInt(RaceRules.BaselineTimeoutSeconds / dt);
+
+            // An absolute schedule rather than "wait dt each tick": the latter accumulates the cost
+            // of every tick's own work (however small) into drift over a multi-minute run, this does
+            // not.
+            var nextRealTime = Time.realtimeSinceStartup;
+
+            for (var step = 0; step < maxSteps; step++)
+            {
+                var finished = 0;
+                var anyDecision = false;
+
+                foreach (var environment in batch)
+                {
+                    AdvanceCar(environment, isBaseline: true, dt, ref anyDecision);
+                    AdvanceCar(environment, isBaseline: false, dt, ref anyDecision);
+
+                    if (environment.Done)
+                    {
+                        finished++;
+                    }
+                }
+
+                // One Academy step for every agent that asked, no matter how many are running.
+                if (anyDecision)
+                {
+                    Academy.Instance.EnvironmentStep();
+                }
+
+                foreach (var environment in batch)
+                {
+                    if (environment.BaselineResult == null)
+                    {
+                        environment.Baseline.Car.Step(dt);
+                    }
+
+                    if (environment.ChallengerResult == null)
+                    {
+                        environment.Challenger.Car.Step(dt);
+                    }
+                }
+
+                Physics.Simulate(dt);
+
+                if (finished >= batch.Count)
+                {
+                    yield break;
+                }
+
+                if (realtime)
+                {
+                    nextRealTime += dt;
+                    onTick?.Invoke(step * dt);
+
+                    while (Time.realtimeSinceStartup < nextRealTime)
+                    {
+                        yield return null;
+                    }
+                }
+                else if (step % stepsPerYield == stepsPerYield - 1)
+                {
+                    onTick?.Invoke(step * dt);
+                    yield return null;
+                }
+            }
+        }
+
+        /// <summary>Anything still running when the clock ran out timed out.</summary>
+        static void FillTimeouts(List<Environment> batch)
+        {
+            foreach (var environment in batch)
+            {
+                environment.BaselineResult ??= Timeout(environment, environment.BaselineContext, "BaselineBot");
+                environment.ChallengerResult ??= Timeout(environment, environment.ChallengerContext, "Agent");
+            }
+        }
+
+        static int CountDone(List<Environment> batch)
+        {
+            var done = 0;
+            foreach (var environment in batch)
+            {
+                if (environment.Done)
+                {
+                    done++;
+                }
+            }
+
+            return done;
+        }
 
         void AdvanceCar(Environment environment, bool isBaseline, float dt, ref bool anyDecision)
         {
@@ -340,7 +447,14 @@ namespace RacingBotCup.Eval
 
             var track = trackObject.AddComponent<TrackInstance>();
             track.Seed = seed;
+
+            // Evaluation always races the fixed, published seed set — hazard sections must never
+            // change what those circuits look like, or the baseline's (and every submitted score's)
+            // lap times on them silently stop meaning what they used to.
+            track.EnableHazardSections = false;
+
             CopyMaterials(track, request.Materials);
+            CopyProps(track, request.Props);
             track.Rebuild();
 
             var baseline = RacerBuilder.BuildBaseline(request.CarPrefab, root.transform);
@@ -383,6 +497,22 @@ namespace RacingBotCup.Eval
             track.Materials.Road = materials.Road;
             track.Materials.Runoff = materials.Runoff;
             track.Materials.Ground = materials.Ground;
+        }
+
+        /// <summary>Harmless with hazards forced off above — kept symmetric with <see cref="CopyMaterials"/>
+        /// in case evaluation ever opts back in.</summary>
+        static void CopyProps(TrackInstance track, TrackPropCatalogue props)
+        {
+            if (props == null)
+            {
+                return;
+            }
+
+            track.Props.Barriers = props.Barriers;
+            track.Props.Crates = props.Crates;
+            track.Props.Logs = props.Logs;
+            track.Props.Containers = props.Containers;
+            track.Props.Ramp = props.Ramp;
         }
 
         /// <summary>

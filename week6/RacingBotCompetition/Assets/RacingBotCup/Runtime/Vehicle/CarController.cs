@@ -58,6 +58,14 @@ namespace RacingBotCup.Vehicle
 
         public bool AllWheelsOffTrack => m_Wheels.Length > 0 && WheelsOffTrack >= m_Wheels.Length;
 
+        /// <summary>
+        /// True while this car is part of a live run. Sequential evaluation leaves each finished
+        /// circuit's cars sitting where they stopped rather than destroying them, so at any moment
+        /// there can be several cars in the scene that satisfy every other "is this a real racing
+        /// car" check — this is what tells a spectating camera which one is not simply parked.
+        /// </summary>
+        public bool IsRacing { get; set; }
+
         public float LastSteerInput => m_SteerInput;
 
         public float LastThrottleInput => m_ThrottleInput;

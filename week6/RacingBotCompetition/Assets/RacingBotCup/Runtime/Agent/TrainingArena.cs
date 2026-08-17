@@ -142,6 +142,7 @@ namespace RacingBotCup.Agent
 
             if (m_Context.LapCompletedThisTick)
             {
+                RecordEpisodeStats();
                 m_Agent.OnLapCompleted(m_Context.ElapsedTime);
                 m_Agent.EndEpisode();
                 return;
@@ -150,9 +151,17 @@ namespace RacingBotCup.Agent
             if (m_Context.OffTrackDuration >= RaceRules.OffTrackDnfSeconds ||
                 m_Context.ElapsedTime >= m_MaxEpisodeSeconds)
             {
+                RecordEpisodeStats();
                 m_Agent.OnRunFailed();
                 m_Agent.EndEpisode();
             }
+        }
+
+        /// <summary>Reports the final state of every training episode to TensorBoard.</summary>
+        void RecordEpisodeStats()
+        {
+            Academy.Instance.StatsRecorder.Add("Episode/Progress", m_Context.Checkpoints.Progress);
+            Academy.Instance.StatsRecorder.Add("Episode/ElapsedSeconds", m_Context.ElapsedTime);
         }
     }
 }

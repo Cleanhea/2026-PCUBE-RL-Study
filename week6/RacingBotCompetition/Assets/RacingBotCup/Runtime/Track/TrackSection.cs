@@ -21,6 +21,22 @@ namespace RacingBotCup.Track
 
         /// <summary>A flowing alternating sequence where carrying momentum is the whole game.</summary>
         Esses = 4,
+
+        /// <summary>
+        /// A hairpin pulled far tighter than <see cref="Hairpin"/> — interior angle as sharp as
+        /// ~35°. Concrete barrier props fence off the inside apex so the infield can't be cut.
+        /// </summary>
+        SharpHairpin = 5,
+
+        /// <summary>A straight with crates, logs and containers scattered across it to weave around.</summary>
+        ObstacleStraight = 6,
+
+        /// <summary>
+        /// A corner whose own racing line is pulled tight to the inside, with a ramp on it. There
+        /// is only one line — the ramp is not an alternate path, so a good launch just carries
+        /// speed through what would otherwise be a slow apex.
+        /// </summary>
+        RampCorner = 7,
     }
 
     /// <summary>

@@ -20,6 +20,10 @@ namespace RacingBotCup.EditorTools
         Vector2 m_Scroll;
         string m_Report = "";
 
+        // SharpHairpin/ObstacleStraight/RampCorner. Off by default — evaluation never uses them, so
+        // this matches what the eval seed set actually races on.
+        bool m_EnableHazards;
+
         [MenuItem("RacingBotCup/Track Preview", priority = 20)]
         public static void Open()
         {
@@ -28,6 +32,10 @@ namespace RacingBotCup.EditorTools
 
         void OnGUI()
         {
+            m_EnableHazards = EditorGUILayout.ToggleLeft(
+                "Enable hazard sections (SharpHairpin / ObstacleStraight / RampCorner)", m_EnableHazards);
+            EditorGUILayout.Space();
+
             EditorGUILayout.LabelField("Single seed", EditorStyles.boldLabel);
             m_Seed = EditorGUILayout.IntField("Seed", m_Seed);
 
@@ -68,7 +76,7 @@ namespace RacingBotCup.EditorTools
             ClearPreview();
 
             var root = new GameObject(k_PreviewRootName);
-            var track = Build(seed, root.transform, Vector3.zero);
+            var track = Build(seed, root.transform, Vector3.zero, m_EnableHazards);
             m_Report = Describe(track);
 
             Selection.activeGameObject = root;
@@ -89,7 +97,7 @@ namespace RacingBotCup.EditorTools
             for (var i = 0; i < seeds.Length; i++)
             {
                 var offset = new Vector3((i % columns) * m_Spacing, 0f, (i / columns) * m_Spacing);
-                var track = Build(seeds[i], root.transform, offset);
+                var track = Build(seeds[i], root.transform, offset, m_EnableHazards);
 
                 report.AppendLine(Describe(track));
                 if (!track.FullyValid)
@@ -107,12 +115,20 @@ namespace RacingBotCup.EditorTools
             Selection.activeGameObject = root;
         }
 
-        static GeneratedTrack Build(int seed, Transform parent, Vector3 offset)
+        static GeneratedTrack Build(int seed, Transform parent, Vector3 offset, bool enableHazards)
         {
-            var generated = TrackGenerator.Generate(seed);
+            var generated = TrackGenerator.Generate(seed, enableHazards);
             var meshRoot = TrackMeshBuilder.Build(generated.Model, SceneBootstrap.LoadMaterials());
             meshRoot.transform.SetParent(parent, false);
             meshRoot.transform.position = offset;
+
+            if (enableHazards)
+            {
+                var obstacleRoot = TrackObstacleBuilder.Build(generated.Model, SceneBootstrap.LoadProps(), seed);
+                obstacleRoot.transform.SetParent(parent, false);
+                obstacleRoot.transform.position = offset;
+            }
+
             return generated;
         }
 

@@ -36,11 +36,17 @@ namespace RacingBotCup.Track
     /// </summary>
     public static class TrackGenerator
     {
-        /// <summary>Bumped to 3.x when circuits gained irregular silhouettes.</summary>
-        public const string Version = "3.0.0";
+        /// <summary>Bumped to 3.x when circuits gained irregular silhouettes; 3.1 added optional
+        /// hazard sections (SharpHairpin/ObstacleStraight/RampCorner).</summary>
+        public const string Version = "3.1.0";
 
         const int k_MaxAttempts = 10;
         const float k_ValidationSpacing = 2f;
+
+        /// <summary>Derive salt for the hazard-selection stream — distinct from every per-attempt
+        /// stream (<c>Derive(attempt)</c>, attempt in [0, k_MaxAttempts)) so rolling hazards once
+        /// up front never collides with or gets reset by the retry loop.</summary>
+        const int k_HazardSalt = 913317;
 
         /// <summary>Spacing of the centreline samples that become spline knots, in metres.</summary>
         const float k_SampleSpacing = 7f;
@@ -62,9 +68,15 @@ namespace RacingBotCup.Track
         static readonly float k_ChicaneShapePeak = ShapePeak(1);
         static readonly float k_EssesShapePeak = ShapePeak(2);
 
-        public static GeneratedTrack Generate(int seed)
+        public static GeneratedTrack Generate(int seed, bool enableHazardSections = false)
         {
             var trackParams = TrackParams.FromSeed(seed);
+
+            // Rolled once per seed, off the attempt loop's streams entirely: re-rolling per attempt
+            // would let "first attempt to validate wins" silently favour whichever hazard mix
+            // happens to be easiest to validate, badly skewing the intended ~25% appearance rate.
+            var hazardRandom = new DeterministicRandom(seed).Derive(k_HazardSalt);
+            var hazards = enableHazardSections ? CircuitLayout.RollHazards(ref hazardRandom) : CircuitLayout.HazardSelection.None;
 
             GeneratedTrack best = null;
             var bestScore = float.MaxValue;
@@ -74,8 +86,9 @@ namespace RacingBotCup.Track
                 var random = new DeterministicRandom(seed).Derive(attempt);
 
                 // Each retry redraws the layout too, so a hostile seed explores genuinely different
-                // circuits rather than nudging the same bad one.
-                var layout = CircuitLayout.Build(ref random, trackParams.TargetLength);
+                // circuits rather than nudging the same bad one. The hazard mix itself does not vary
+                // between attempts — see hazards above.
+                var layout = CircuitLayout.Build(ref random, trackParams.TargetLength, hazards);
 
                 // Later attempts flatten the anchor jitter and open the corners out, so a seed that
                 // keeps producing something too tight converges instead of exhausting the budget.
@@ -86,6 +99,8 @@ namespace RacingBotCup.Track
                 candidateParams.ChicaneThrow *= 1f + ease * 0.7f;
                 candidateParams.EssesThrow *= 1f + ease * 0.7f;
                 candidateParams.HairpinReach *= 1f - ease * 0.35f;
+                candidateParams.SharpHairpinReach *= 1f - ease * 0.35f;
+                candidateParams.RampCornerThrow *= 1f - ease * 0.35f;
 
                 var points = new List<float3>();
                 var sectionStart = new int[layout.Count];
@@ -249,6 +264,9 @@ namespace RacingBotCup.Track
             switch (type)
             {
                 case TrackSectionType.Straight:
+                case TrackSectionType.ObstacleStraight:
+                    // Obstacles are decoration placed afterward over a plain straight — the
+                    // centreline itself does not change.
                     EmitLine(points, from, to);
                     break;
 
@@ -256,6 +274,23 @@ namespace RacingBotCup.Track
                 {
                     // Bulging outward opens the corner into a sweeper; inward tightens it.
                     var bulge = length * random.Range(-0.05f, 0.16f);
+                    var steps = Mathf.Max(2, Mathf.RoundToInt(length / k_SampleSpacing));
+
+                    for (var i = 0; i < steps; i++)
+                    {
+                        var t = i / (float)steps;
+                        points.Add(from + forward * (length * t) + outward * (Mathf.Sin(Mathf.PI * t) * bulge));
+                    }
+
+                    break;
+                }
+
+                case TrackSectionType.RampCorner:
+                {
+                    // Same shape as Corner, but the bulge is inward-only and much larger: this
+                    // pulls the section's one and only line tight to the inside, with the ramp
+                    // sitting on it — there is no separate "shortcut" path to reason about.
+                    var bulge = -length * trackParams.RampCornerThrow;
                     var steps = Mathf.Max(2, Mathf.RoundToInt(length / k_SampleSpacing));
 
                     for (var i = 0; i < steps; i++)
@@ -279,6 +314,20 @@ namespace RacingBotCup.Track
                     var vertex = middle - outward * (length * trackParams.HairpinReach * 0.55f);
                     var radius = Mathf.Max(TrackParams.HairpinMinRadius * 1.5f, 16f);
                     EmitRoundedCorner(points, from, vertex, to, radius);
+                    break;
+                }
+
+                case TrackSectionType.SharpHairpin:
+                {
+                    // `outward` points away from the circuit's centre, not necessarily
+                    // perpendicular to *this section's own chord*. A pull with any component
+                    // *along* forward drags the vertex off the chord's perpendicular bisector and
+                    // produces an uncontrolled angle instead of the one asked for. Projecting that
+                    // component out keeps the pull perpendicular, matching the angle formula below.
+                    var outwardPerp = outward - forward * Vector3.Dot(outward, forward);
+                    outwardPerp = outwardPerp.sqrMagnitude > 1e-6f ? outwardPerp.normalized : lateral;
+
+                    EmitSharpHairpin(points, from, to, forward, outwardPerp, length, trackParams);
                     break;
                 }
 
@@ -338,10 +387,10 @@ namespace RacingBotCup.Track
         }
 
         /// <summary>Samples the segment from <paramref name="a"/> up to but excluding <paramref name="b"/>.</summary>
-        static void EmitLine(List<float3> points, Vector3 a, Vector3 b)
+        static void EmitLine(List<float3> points, Vector3 a, Vector3 b, float spacing = k_SampleSpacing)
         {
             var length = Vector3.Distance(a, b);
-            var steps = Mathf.Max(1, Mathf.RoundToInt(length / k_SampleSpacing));
+            var steps = Mathf.Max(1, Mathf.RoundToInt(length / spacing));
 
             for (var i = 0; i < steps; i++)
             {
@@ -353,9 +402,80 @@ namespace RacingBotCup.Track
         /// Two legs meeting at a corner of a known radius, with the tip rounded into a real
         /// circular arc. Setting the radius explicitly is the point: every other way of tightening
         /// a corner leaves the actual radius as something only the validator finds out about.
+        /// Used for <see cref="TrackSectionType.Hairpin"/>; <see cref="TrackSectionType.SharpHairpin"/>
+        /// has its own <see cref="EmitSharpHairpin"/> instead — see that method for why.
         /// </summary>
-        static void EmitRoundedCorner(List<float3> points, Vector3 from, Vector3 vertex, Vector3 to, float radius)
+        static void EmitRoundedCorner(
+            List<float3> points, Vector3 from, Vector3 vertex, Vector3 to, float radius,
+            float sampleSpacing = k_SampleSpacing)
         {
+            var toStart = from - vertex;
+            var toEnd = to - vertex;
+
+            var legIn = toStart.magnitude;
+            var legOut = toEnd.magnitude;
+            if (legIn < 1e-3f || legOut < 1e-3f)
+            {
+                EmitLine(points, from, to, sampleSpacing);
+                return;
+            }
+
+            var dirIn = toStart / legIn;
+            var dirOut = toEnd / legOut;
+
+            var interior = Vector3.Angle(dirIn, dirOut) * Mathf.Deg2Rad;
+            if (interior < 0.08f || interior > Mathf.PI - 0.08f)
+            {
+                EmitLine(points, from, to, sampleSpacing);
+                return;
+            }
+
+            // How far back from the vertex the arc has to start for this radius.
+            var tangent = Mathf.Min(radius / Mathf.Tan(interior * 0.5f), Mathf.Min(legIn, legOut) * 0.85f);
+            var arcStart = vertex + dirIn * tangent;
+            var arcEnd = vertex + dirOut * tangent;
+
+            var bisector = (dirIn + dirOut).normalized;
+            var centre = vertex + bisector * (tangent / Mathf.Cos(interior * 0.5f));
+
+            EmitLine(points, from, arcStart, sampleSpacing);
+
+            var startArm = arcStart - centre;
+            var sweep = Vector3.SignedAngle(startArm, arcEnd - centre, Vector3.up);
+            var arcLength = Mathf.Abs(sweep) * Mathf.Deg2Rad * startArm.magnitude;
+            var steps = Mathf.Max(3, Mathf.RoundToInt(arcLength / Mathf.Min(sampleSpacing, radius * 0.35f)));
+
+            for (var i = 0; i < steps; i++)
+            {
+                points.Add(centre + Quaternion.AngleAxis(sweep * (i / (float)steps), Vector3.up) * startArm);
+            }
+
+            EmitLine(points, arcEnd, to, sampleSpacing);
+        }
+
+        /// <summary>
+        /// A tight, self-contained hairpin: the same rounded-tip construction as
+        /// <see cref="EmitRoundedCorner"/>, but with each straight leg replaced by a cubic Hermite
+        /// blend from the neighbouring section's own direction into the leg's.
+        ///
+        /// Every other corner type hands its junctions to <see cref="SmoothClosed"/>'s generic
+        /// 3-point blend, which works because their entry/exit tangents only deviate a little from
+        /// the chord (<c>forward</c>). SharpHairpin's entry leg points up to ~140° away from it —
+        /// a deviation that large, concentrated at a single knot shared with a neighbour who has no
+        /// idea it is coming, is exactly what a corner-cutting blur eats: measured across dozens of
+        /// seeds with <see cref="EmitRoundedCorner"/> here instead, the smoothed result kept only a
+        /// fraction of the turn the vertex geometry actually called for. Spreading that same turn
+        /// out over a curve this method already draws smoothly — starting and ending tangent to
+        /// <c>forward</c>, so it reads as an ordinary approach and exit to every section around it
+        /// — leaves <see cref="SmoothClosed"/> nothing destructive left to do.
+        /// </summary>
+        static void EmitSharpHairpin(
+            List<float3> points, Vector3 from, Vector3 to, Vector3 forward, Vector3 outwardPerp,
+            float length, TrackParams trackParams)
+        {
+            var middle = (from + to) * 0.5f;
+            var vertex = middle - outwardPerp * (length * trackParams.SharpHairpinReach);
+
             var toStart = from - vertex;
             var toEnd = to - vertex;
 
@@ -377,27 +497,76 @@ namespace RacingBotCup.Track
                 return;
             }
 
-            // How far back from the vertex the arc has to start for this radius.
-            var tangent = Mathf.Min(radius / Mathf.Tan(interior * 0.5f), Mathf.Min(legIn, legOut) * 0.85f);
+            var radius = Mathf.Max(TrackParams.SharpHairpinMinRadius * 1.3f, 9f);
+
+            // Capped tighter than EmitRoundedCorner's 0.85 — the outer part of each leg belongs to
+            // the Hermite blend below, not to a straight run at the tip's own radius.
+            var tangent = Mathf.Min(radius / Mathf.Tan(interior * 0.5f), Mathf.Min(legIn, legOut) * 0.6f);
             var arcStart = vertex + dirIn * tangent;
             var arcEnd = vertex + dirOut * tangent;
 
             var bisector = (dirIn + dirOut).normalized;
             var centre = vertex + bisector * (tangent / Mathf.Cos(interior * 0.5f));
 
-            EmitLine(points, from, arcStart);
+            // One spacing for the whole section, Hermite blends included — Unity's spline AutoSmooth
+            // infers a knot's tangent from how far its neighbours are, so a jump in point spacing
+            // (the Hermite blend's, well short of the arc's) reads as exactly the kind of uneven
+            // knot run that overshoots into a cusp on its own, independently of how carefully this
+            // method's own polyline tangent was kept continuous.
+            var spacing = Mathf.Min(k_SampleSpacing, radius * 0.35f);
+
+            // from (heading forward, same as whatever the previous section left off heading) blends
+            // into arcStart (heading -dirIn, into the tip).
+            EmitHermite(points, from, forward, arcStart, -dirIn, spacing);
 
             var startArm = arcStart - centre;
             var sweep = Vector3.SignedAngle(startArm, arcEnd - centre, Vector3.up);
             var arcLength = Mathf.Abs(sweep) * Mathf.Deg2Rad * startArm.magnitude;
-            var steps = Mathf.Max(3, Mathf.RoundToInt(arcLength / Mathf.Min(k_SampleSpacing, radius * 0.35f)));
+            var arcSteps = Mathf.Max(3, Mathf.RoundToInt(arcLength / spacing));
+
+            for (var i = 0; i < arcSteps; i++)
+            {
+                points.Add(centre + Quaternion.AngleAxis(sweep * (i / (float)arcSteps), Vector3.up) * startArm);
+            }
+
+            // arcEnd (heading dirOut, out of the tip) blends back into `to` heading forward again —
+            // matching whatever the next section expects to find waiting for it there.
+            EmitHermite(points, arcEnd, dirOut, to, forward, spacing);
+        }
+
+        /// <summary>
+        /// Cubic Hermite segment from <paramref name="from"/> (tangent <paramref name="fromDir"/>)
+        /// to <paramref name="to"/> (tangent <paramref name="toDir"/>), sampled from (but excluding)
+        /// <paramref name="from"/> up to (but excluding) <paramref name="to"/> — the same half-open
+        /// convention as <see cref="EmitLine"/>, so callers can chain it with other emitters. Tangent
+        /// vectors are scaled to the chord length, the usual choice that keeps the curve well-behaved
+        /// (no overshoot loop) even when the two directions are wildly different.
+        /// </summary>
+        static void EmitHermite(List<float3> points, Vector3 from, Vector3 fromDir, Vector3 to, Vector3 toDir, float spacing)
+        {
+            var chord = Vector3.Distance(from, to);
+            if (chord < 1e-3f)
+            {
+                return;
+            }
+
+            var t0 = fromDir.normalized * chord;
+            var t1 = toDir.normalized * chord;
+            var steps = Mathf.Max(4, Mathf.RoundToInt(chord / spacing));
 
             for (var i = 0; i < steps; i++)
             {
-                points.Add(centre + Quaternion.AngleAxis(sweep * (i / (float)steps), Vector3.up) * startArm);
-            }
+                var t = i / (float)steps;
+                var t2 = t * t;
+                var t3 = t2 * t;
 
-            EmitLine(points, arcEnd, to);
+                var h00 = 2f * t3 - 3f * t2 + 1f;
+                var h10 = t3 - 2f * t2 + t;
+                var h01 = -2f * t3 + 3f * t2;
+                var h11 = t3 - t2;
+
+                points.Add(from * h00 + t0 * h10 + to * h01 + t1 * h11);
+            }
         }
 
         /// <summary>
@@ -541,7 +710,11 @@ namespace RacingBotCup.Track
             {
                 case TrackSectionType.Hairpin:
                     return TrackParams.HairpinMinRadius;
+                case TrackSectionType.SharpHairpin:
+                    return TrackParams.SharpHairpinMinRadius;
                 case TrackSectionType.Chicane:
+                    return TrackParams.HairpinMinRadius * 1.25f;
+                case TrackSectionType.RampCorner:
                     return TrackParams.HairpinMinRadius * 1.25f;
                 case TrackSectionType.Esses:
                     return Mathf.Min(trackParams.MinCurvatureRadius, 22f);

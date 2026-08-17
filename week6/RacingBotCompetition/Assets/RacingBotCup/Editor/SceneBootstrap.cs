@@ -36,8 +36,59 @@ namespace RacingBotCup.EditorTools
         const string k_RoadMaterialPath = k_MaterialFolder + "PolygonStreetRacer_Road_Mat_03.mat";
         const string k_RunoffMaterialPath = k_MaterialFolder + "PolygonStreetRacer_Road_Mat_01.mat";
 
+        const string k_PropFolder = "Assets/PolygonStreetRacer/Prefabs/Props/";
+
+        static readonly string[] k_BarrierPrefabPaths =
+        {
+            k_PropFolder + "SM_Prop_Barrier_Concrete_01.prefab",
+            k_PropFolder + "SM_Prop_Barrier_Concrete_02.prefab",
+            k_PropFolder + "SM_Prop_Barrier_Concrete_03.prefab",
+            k_PropFolder + "SM_Prop_Barrier_Concrete_04.prefab",
+        };
+
+        static readonly string[] k_CratePrefabPaths =
+        {
+            k_PropFolder + "SM_Prop_Crate_01.prefab",
+            k_PropFolder + "SM_Prop_Crate_02.prefab",
+        };
+
+        static readonly string[] k_LogPrefabPaths =
+        {
+            k_PropFolder + "SM_Prop_Log_Single_01.prefab",
+            k_PropFolder + "SM_Prop_Log_Single_02.prefab",
+            k_PropFolder + "SM_Prop_Log_Single_03.prefab",
+            k_PropFolder + "SM_Prop_Log_Single_04.prefab",
+            k_PropFolder + "SM_Prop_Log_Single_05.prefab",
+            k_PropFolder + "SM_Prop_Log_Single_06.prefab",
+        };
+
+        static readonly string[] k_ContainerPrefabPaths =
+        {
+            k_PropFolder + "SM_Prop_Container_Small_01.prefab",
+            k_PropFolder + "SM_Prop_Container_Small_Doors_01.prefab",
+            k_PropFolder + "SM_Prop_Container_Small_Stack_01.prefab",
+            k_PropFolder + "SM_Prop_Container_Small_Stack_02.prefab",
+        };
+
+        const string k_RampPrefabPath = k_PropFolder + "SM_Prop_Ramp_Mesh_01.prefab";
+
         /// <summary>Circuit the training scene opens on. Any practice seed does.</summary>
         const int k_DefaultTrainingSeed = 4242;
+
+        /// <summary>
+        /// How many training areas run side by side. ML-Agents batches experience from every agent
+        /// that shares a behaviour name, so replicating the whole environment — track, car and
+        /// arena, not just the agent — is what actually parallelises training inside a single
+        /// Editor session: four cars collecting steps every physics tick instead of one.
+        /// </summary>
+        const int k_ParallelEnvironments = 4;
+
+        /// <summary>
+        /// Distance between environments. Matches the spacing evaluation uses between its circuits —
+        /// comfortably wider than the largest circuit a random seed can produce, so two training
+        /// areas never overlap even as each one randomises independently every episode.
+        /// </summary>
+        const float k_EnvironmentSpacing = 1600f;
 
         [MenuItem("RacingBotCup/Build Scenes", priority = 0)]
         public static void BuildScenesFromMenu()
@@ -73,18 +124,45 @@ namespace RacingBotCup.EditorTools
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             AddEnvironment();
 
-            var track = CreateTrack(k_DefaultTrainingSeed);
-            var car = CreateCar(track);
+            for (var i = 0; i < k_ParallelEnvironments; i++)
+            {
+                BuildTrainingEnvironment(i);
+            }
 
-            var arena = new GameObject("TrainingArena");
-            var component = arena.AddComponent<TrainingArena>();
+            EditorSceneManager.SaveScene(scene, TrainingScenePath);
+        }
+
+        /// <summary>
+        /// One self-contained training area: its own circuit, car, agent and arena, sitting far
+        /// enough from the others that none of their geometry overlaps. Each starts on its own seed
+        /// purely so the scene reads as four distinct environments the moment it opens — every arena
+        /// still rerolls its own track independently once training starts.
+        /// </summary>
+        static void BuildTrainingEnvironment(int index)
+        {
+            var root = new GameObject($"Environment_{index}");
+            root.transform.position = GridPosition(index);
+
+            var track = CreateTrack(k_DefaultTrainingSeed + index, root.transform);
+            var car = CreateCar(track, root.transform);
+
+            var arenaObject = new GameObject("TrainingArena");
+            arenaObject.transform.SetParent(root.transform, false);
+            var component = arenaObject.AddComponent<TrainingArena>();
 
             var serialized = new SerializedObject(component);
             serialized.FindProperty("m_Track").objectReferenceValue = track;
             serialized.FindProperty("m_Car").objectReferenceValue = car;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
 
-            EditorSceneManager.SaveScene(scene, TrainingScenePath);
+        static Vector3 GridPosition(int index)
+        {
+            var columns = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(k_ParallelEnvironments)));
+            return new Vector3(
+                index % columns * k_EnvironmentSpacing,
+                0f,
+                index / columns * k_EnvironmentSpacing);
         }
 
         static void BuildEvaluationScene()
@@ -103,20 +181,24 @@ namespace RacingBotCup.EditorTools
                 LoadAsset<SubmissionConfig>(k_SubmissionConfigPath);
             serialized.FindProperty("m_RunOnStart").boolValue = true;
             AssignMaterials(serialized);
+            AssignProps(serialized);
             serialized.ApplyModifiedPropertiesWithoutUndo();
 
             EditorSceneManager.SaveScene(scene, EvaluationScenePath);
         }
 
-        /// <summary>Creates a circuit and bakes its geometry into the scene.</summary>
-        static TrackInstance CreateTrack(int seed)
+        /// <summary>Creates a circuit — parented, so a training area can be offset as one unit — and
+        /// bakes its geometry into the scene.</summary>
+        static TrackInstance CreateTrack(int seed, Transform parent)
         {
             var trackObject = new GameObject("Circuit");
+            trackObject.transform.SetParent(parent, false);
             var track = trackObject.AddComponent<TrackInstance>();
 
             var serialized = new SerializedObject(track);
             serialized.FindProperty("m_Seed").intValue = seed;
             AssignMaterials(serialized);
+            AssignProps(serialized);
             serialized.ApplyModifiedPropertiesWithoutUndo();
 
             track.Rebuild();
@@ -124,7 +206,7 @@ namespace RacingBotCup.EditorTools
         }
 
         /// <summary>Drops the car on the start line with the sample agent already attached.</summary>
-        static CarController CreateCar(TrackInstance track)
+        static CarController CreateCar(TrackInstance track, Transform parent)
         {
             var carPrefab = PrefabBaker.LoadCarPrefab();
             var agentPrefab = PrefabBaker.LoadAgentPrefab();
@@ -137,11 +219,14 @@ namespace RacingBotCup.EditorTools
 
             var carObject = (GameObject)PrefabUtility.InstantiatePrefab(carPrefab);
             carObject.name = "RaceCar";
+            carObject.transform.SetParent(parent, false);
 
             var agentObject = (GameObject)PrefabUtility.InstantiatePrefab(agentPrefab);
             agentObject.name = "Agent";
             agentObject.transform.SetParent(carObject.transform, false);
 
+            // The track's own model was already rebased to its (offset) transform, so this is a
+            // world-space pose that lands the car correctly no matter which environment it is in.
             var pose = track.Model.GetStartPose(RaceRules.StartHeightOffset);
             carObject.transform.SetPositionAndRotation(pose.position, pose.rotation);
 
@@ -207,6 +292,59 @@ namespace RacingBotCup.EditorTools
                 Runoff = LoadAsset<Material>(k_RunoffMaterialPath),
                 Ground = GeneratedMaterials.LoadOrCreateGrass(),
             };
+        }
+
+        static void AssignProps(SerializedObject serialized)
+        {
+            var props = serialized.FindProperty("m_Props");
+            if (props == null)
+            {
+                return;
+            }
+
+            AssignPrefabArray(props.FindPropertyRelative("Barriers"), k_BarrierPrefabPaths);
+            AssignPrefabArray(props.FindPropertyRelative("Crates"), k_CratePrefabPaths);
+            AssignPrefabArray(props.FindPropertyRelative("Logs"), k_LogPrefabPaths);
+            AssignPrefabArray(props.FindPropertyRelative("Containers"), k_ContainerPrefabPaths);
+            props.FindPropertyRelative("Ramp").objectReferenceValue = LoadAsset<GameObject>(k_RampPrefabPath);
+        }
+
+        static void AssignPrefabArray(SerializedProperty arrayProperty, string[] paths)
+        {
+            if (arrayProperty == null)
+            {
+                return;
+            }
+
+            arrayProperty.arraySize = paths.Length;
+            for (var i = 0; i < paths.Length; i++)
+            {
+                arrayProperty.GetArrayElementAtIndex(i).objectReferenceValue = LoadAsset<GameObject>(paths[i]);
+            }
+        }
+
+        /// <summary>Loads the prop catalogue for tools that build a track outside a scene.</summary>
+        public static TrackPropCatalogue LoadProps()
+        {
+            return new TrackPropCatalogue
+            {
+                Barriers = LoadAssets<GameObject>(k_BarrierPrefabPaths),
+                Crates = LoadAssets<GameObject>(k_CratePrefabPaths),
+                Logs = LoadAssets<GameObject>(k_LogPrefabPaths),
+                Containers = LoadAssets<GameObject>(k_ContainerPrefabPaths),
+                Ramp = LoadAsset<GameObject>(k_RampPrefabPath),
+            };
+        }
+
+        static T[] LoadAssets<T>(string[] paths) where T : Object
+        {
+            var results = new T[paths.Length];
+            for (var i = 0; i < paths.Length; i++)
+            {
+                results[i] = LoadAsset<T>(paths[i]);
+            }
+
+            return results;
         }
 
         static T LoadAsset<T>(string path) where T : Object

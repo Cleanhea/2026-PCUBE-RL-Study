@@ -1,3 +1,4 @@
+using RacingBotCup.Agent;
 using RacingBotCup.Vehicle;
 using UnityEngine;
 
@@ -63,12 +64,13 @@ namespace RacingBotCup.Eval
         }
 
         /// <summary>
-        /// Picks the car that is actually on the circuit. Re-checked a few times a second because
-        /// the harness swaps cars between laps and destroys them between seeds.
+        /// Picks the competitor's car that is actually still racing right now — never the baseline
+        /// ghost, and never a finished car left sitting where an earlier seed ended. Re-checked a
+        /// few times a second because the harness swaps cars between laps and between seeds.
         /// </summary>
         void AcquireTarget()
         {
-            var stillValid = m_Target != null && m_Target.transform.position.y > -100f;
+            var stillValid = m_Target != null && IsLiveAgentCar(m_Target);
             if (stillValid && Time.unscaledTime < m_NextSearch)
             {
                 return;
@@ -78,7 +80,7 @@ namespace RacingBotCup.Eval
 
             foreach (var car in FindObjectsByType<CarController>(FindObjectsSortMode.None))
             {
-                if (car.transform.position.y > -100f)
+                if (IsLiveAgentCar(car))
                 {
                     m_Target = car;
                     return;
@@ -89,6 +91,26 @@ namespace RacingBotCup.Eval
             {
                 m_Target = null;
             }
+        }
+
+        /// <summary>
+        /// True for the competitor's car, and only while it is actually still racing. Three separate
+        /// conditions, each ruling out one specific kind of car that is not what a spectator wants to
+        /// watch:
+        /// <list type="bullet">
+        /// <item>parked below the world (an idle rig waiting its turn)</item>
+        /// <item>the baseline ghost — it drives itself through <see cref="RacingBotCup.Agent.BaselineBot"/>
+        /// directly on the car, never through a <see cref="RacerAgent"/></item>
+        /// <item>a competitor's car that already finished its seed — sequential evaluation leaves
+        /// these sitting rather than destroying them, so without this a re-search can hand the camera
+        /// any one of however many have piled up so far, however far away it stopped</item>
+        /// </list>
+        /// </summary>
+        public static bool IsLiveAgentCar(CarController car)
+        {
+            return car.IsRacing
+                && car.transform.position.y > -100f
+                && car.GetComponentInChildren<RacerAgent>() != null;
         }
     }
 }

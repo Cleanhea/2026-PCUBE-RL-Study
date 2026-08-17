@@ -24,7 +24,55 @@ namespace RacingBotCup.Track
             // and a swing squeezed into a short chord becomes a cusp rather than a corner.
             [TrackSectionType.Chicane] = 1.5f,
             [TrackSectionType.Esses] = 2.6f,
+
+            // Decorated variants keep their base type's weight — swapping one in should not shift
+            // how much of the lap is allotted to that kind of section.
+            [TrackSectionType.SharpHairpin] = 1.0f,
+            [TrackSectionType.ObstacleStraight] = 3.2f,
+            [TrackSectionType.RampCorner] = 1.2f,
         };
+
+        /// <summary>Chance each hazard variant appears at all in a given circuit, independently.</summary>
+        const float k_HazardChance = 0.25f;
+
+        /// <summary>
+        /// Which hazard variants a circuit gets, decided once per seed — never re-rolled per
+        /// validation attempt. <see cref="TrackGenerator.Generate"/> retries with a fresh layout
+        /// (and fresh centreline noise) up to <see cref="TrackGenerator.k_MaxAttempts"/> times, and
+        /// returns whichever attempt validates first. Re-rolling hazards on every attempt would let
+        /// that race silently discriminate against whichever variant happens to be harder to
+        /// validate: an attempt that rolled "no SharpHairpin" is more likely to pass on its first
+        /// try, so it wins the race far more than 75% of the time — this struct is what keeps a
+        /// seed's hazard mix fixed while still letting the per-attempt easing loosen the *geometry*
+        /// enough for a stubborn seed to converge with the hazard still in it.
+        /// </summary>
+        public struct HazardSelection
+        {
+            public static readonly HazardSelection None = default;
+
+            public bool SharpHairpin;
+            public float SharpHairpinPick;
+            public bool ObstacleStraight;
+            public float ObstacleStraightPick;
+            public bool RampCorner;
+            public float RampCornerPick;
+        }
+
+        /// <summary>Rolls a <see cref="HazardSelection"/> from the given stream. Call once per seed,
+        /// on a stream separate from the per-attempt one, then pass the same result to every
+        /// <see cref="Build"/> call for that seed.</summary>
+        public static HazardSelection RollHazards(ref DeterministicRandom random)
+        {
+            return new HazardSelection
+            {
+                SharpHairpin = random.NextFloat() < k_HazardChance,
+                SharpHairpinPick = random.NextFloat(),
+                ObstacleStraight = random.NextFloat() < k_HazardChance,
+                ObstacleStraightPick = random.NextFloat(),
+                RampCorner = random.NextFloat() < k_HazardChance,
+                RampCornerPick = random.NextFloat(),
+            };
+        }
 
         /// <summary>Metres of circuit per section. Roughly a section every football pitch and a half.</summary>
         const float k_MetresPerSection = 160f;
@@ -71,7 +119,12 @@ namespace RacingBotCup.Track
         /// Circuit length in metres. Section count scales with it — packing fourteen features into
         /// 900 m leaves every one of them too short to be recognisable.
         /// </param>
-        public static CircuitLayout Build(ref DeterministicRandom random, float targetLength)
+        /// <param name="hazards">
+        /// Which hazard variants to apply, decided once per seed via <see cref="RollHazards"/> —
+        /// pass <see cref="HazardSelection.None"/> to disable them entirely (the default everywhere
+        /// except <see cref="TrackInstance"/>'s training-facing default).
+        /// </param>
+        public static CircuitLayout Build(ref DeterministicRandom random, float targetLength, HazardSelection hazards = default)
         {
             var types = new List<TrackSectionType>
             {
@@ -128,6 +181,8 @@ namespace RacingBotCup.Track
                 esses += addsEsses ? 1 : 0;
             }
 
+            ApplyHazardSections(types, hazards);
+
             var layout = new CircuitLayout
             {
                 Types = types.ToArray(),
@@ -152,6 +207,65 @@ namespace RacingBotCup.Track
             return false;
         }
 
+        /// <summary>
+        /// Applies whichever hazard variants <paramref name="hazards"/> selected, converting one
+        /// eligible section of the matching base type into each. Runs after the base layout is
+        /// decided and before <see cref="MarkBrakingZones"/> / <see cref="ComputeSpans"/>, so both
+        /// see the final, decorated type list.
+        /// </summary>
+        static void ApplyHazardSections(List<TrackSectionType> types, HazardSelection hazards)
+        {
+            if (hazards.SharpHairpin)
+            {
+                TryDecorate(types, hazards.SharpHairpinPick, TrackSectionType.Hairpin, TrackSectionType.SharpHairpin, skipIndex: -1);
+            }
+
+            // Index 0 is always the main straight (see the two seed entries at the top of Build) and
+            // always leads into the opening hairpin — keeping it a plain Straight guarantees the
+            // circuit's mandatory heavy-braking-zone invariant survives regardless of what else here
+            // gets decorated.
+            if (hazards.ObstacleStraight)
+            {
+                TryDecorate(types, hazards.ObstacleStraightPick, TrackSectionType.Straight, TrackSectionType.ObstacleStraight, skipIndex: 0);
+            }
+
+            if (hazards.RampCorner)
+            {
+                TryDecorate(types, hazards.RampCornerPick, TrackSectionType.Corner, TrackSectionType.RampCorner, skipIndex: -1);
+            }
+        }
+
+        /// <summary>
+        /// Converts the section at <c>eligible[floor(pick * eligible.Count)]</c> — a stored fraction
+        /// rather than a stored index, since which indices are eligible can differ from one retry
+        /// attempt's layout to the next, but "roughly this far through the eligible list" still
+        /// picks out a consistent, reproducible choice on each of them.
+        /// </summary>
+        static void TryDecorate(
+            List<TrackSectionType> types,
+            float pick,
+            TrackSectionType baseType,
+            TrackSectionType decoratedType,
+            int skipIndex)
+        {
+            var eligible = new List<int>();
+            for (var i = 0; i < types.Count; i++)
+            {
+                if (types[i] == baseType && i != skipIndex)
+                {
+                    eligible.Add(i);
+                }
+            }
+
+            if (eligible.Count == 0)
+            {
+                return;
+            }
+
+            var index = Mathf.Clamp(Mathf.FloorToInt(pick * eligible.Count), 0, eligible.Count - 1);
+            types[eligible[index]] = decoratedType;
+        }
+
         void MarkBrakingZones()
         {
             BrakingZones = new bool[Types.Length];
@@ -163,7 +277,9 @@ namespace RacingBotCup.Track
                 }
 
                 var next = Types[(i + 1) % Types.Length];
-                BrakingZones[i] = next == TrackSectionType.Hairpin || next == TrackSectionType.Chicane;
+                BrakingZones[i] = next == TrackSectionType.Hairpin
+                                  || next == TrackSectionType.SharpHairpin
+                                  || next == TrackSectionType.Chicane;
             }
         }
 

@@ -10,6 +10,12 @@ namespace RacingBotCup.Track
     {
         public const string Track = "Track";
         public const string OffTrack = "OffTrack";
+
+        /// <summary>Solid props to avoid: concrete barriers, crates, logs, containers.</summary>
+        public const string Obstacle = "Obstacle";
+
+        /// <summary>A ramp prop, tagged separately from <see cref="Obstacle"/> since it is meant to be used, not avoided.</summary>
+        public const string Ramp = "Ramp";
     }
 
     /// <summary>Layers the harness relies on.</summary>

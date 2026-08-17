@@ -13,6 +13,9 @@ namespace RacingBotCup.Track
         /// <summary>Floor on corner radius for hairpins, which are meant to be the tight bit.</summary>
         public const float HairpinMinRadius = 11f;
 
+        /// <summary>Floor on corner radius for <see cref="TrackSectionType.SharpHairpin"/> — tighter still.</summary>
+        public const float SharpHairpinMinRadius = 7f;
+
         public int Seed;
 
         /// <summary>Target centreline length in metres (800–2000).</summary>
@@ -48,6 +51,24 @@ namespace RacingBotCup.Track
         public float HairpinReach;
 
         /// <summary>
+        /// Reach of a <see cref="TrackSectionType.SharpHairpin"/>'s vertex pull, as a fraction of
+        /// its chord length. The interior angle at the vertex is <c>2*atan(0.5/SharpHairpinReach)</c>
+        /// — the sampled range targets roughly 32°-53°, well past an ordinary hairpin's own ~68°-87°.
+        /// SharpHairpin draws its own hand-off to the sections on either side of it (see
+        /// <see cref="TrackGenerator.EmitSharpHairpin"/>) rather than leaning on the generic
+        /// junction-smoothing every other corner shares, which is what makes a reach this aggressive
+        /// survive as an actual tight turn instead of being smoothed back down to a shallow wiggle.
+        /// </summary>
+        public float SharpHairpinReach;
+
+        /// <summary>
+        /// How hard a <see cref="TrackSectionType.RampCorner"/> pulls its own line toward the
+        /// inside, as a fraction of its chord length. Reused directly as the sine-bulge amplitude
+        /// factor — there is only one line through this section, and this is how tight it is.
+        /// </summary>
+        public float RampCornerThrow;
+
+        /// <summary>
         /// How tight a chicane is allowed to be, as a multiple of <see cref="MinCurvatureRadius"/>.
         /// Below 1 the chicane bites harder than an ordinary corner.
         /// </summary>
@@ -72,6 +93,8 @@ namespace RacingBotCup.Track
                 ShapePhase = random.Range(0f, Mathf.PI * 2f),
                 ShapeSecondaryPhase = random.Range(0f, Mathf.PI * 2f),
                 HairpinReach = random.Range(0.95f, 1.35f),
+                SharpHairpinReach = random.Range(1.0f, 1.6f),
+                RampCornerThrow = random.Range(0.18f, 0.30f),
                 ChicaneThrow = random.Range(0.9f, 1.3f),
                 EssesThrow = random.Range(1.0f, 1.5f),
                 WidthPhase = random.Range(0f, Mathf.PI * 2f),

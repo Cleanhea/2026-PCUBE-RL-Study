@@ -55,6 +55,7 @@ namespace RacingBotCup.Eval
         [SerializeField] GameObject m_CarPrefab;
         [SerializeField] TextAsset m_SeedSetAsset;
         [SerializeField] TrackMaterials m_Materials = new TrackMaterials();
+        [SerializeField] TrackPropCatalogue m_Props = new TrackPropCatalogue();
         [SerializeField] SubmissionConfig m_SubmissionConfig;
 
         [Tooltip("실시간으로 낮춰 주행을 눈으로 볼 수 있게 합니다. 점수는 동일합니다")]
@@ -128,6 +129,7 @@ namespace RacingBotCup.Eval
                 Model = m_Model,
                 Seeds = seeds,
                 Materials = m_Materials,
+                Props = m_Props,
                 ParticipantId = m_ParticipantId,
                 Note = m_Note,
                 WatchMode = m_WatchMode,

@@ -26,15 +26,23 @@ namespace RacingBotCup.UI
         [Tooltip("랩 타임 표시")]
         [SerializeField] bool m_ShowTimer = true;
 
+        [Tooltip("조향·스로틀 입력을 WASD 막대로 표시")]
+        [SerializeField] bool m_ShowInputKeys = true;
+
         static readonly Color k_Dim = new Color(1f, 1f, 1f, 0.7f);
         static readonly Color k_OffTrack = new Color(1f, 0.45f, 0.35f);
         static readonly Color k_LapDone = new Color(0.55f, 0.95f, 0.55f);
+        static readonly Color k_InputFill = new Color(0.35f, 0.78f, 0.95f, 0.95f);
 
         Text m_Readout;
         Text m_Caption;
         Text m_Timer;
         Text m_LapTime;
         RectTransform m_BarFill;
+        RectTransform m_KeyWFill;
+        RectTransform m_KeyAFill;
+        RectTransform m_KeySFill;
+        RectTransform m_KeyDFill;
         Eval.ChaseCamera m_Chase;
         RaceClock m_Clock;
         float m_NextSearch;
@@ -68,6 +76,35 @@ namespace RacingBotCup.UI
             m_Caption.text = offTrack ? "OFF TRACK" : "km/h";
 
             UpdateTimer();
+            UpdateInputKeys();
+        }
+
+        /// <summary>
+        /// Fills the four key bars from the car's actual continuous input rather than any real
+        /// keyboard — this reads the same <see cref="CarController.LastSteerInput"/> and
+        /// <see cref="CarController.LastThrottleInput"/> whether they came from a human on WASD or a
+        /// trained policy, so watching a policy shows exactly how hard it is turning and on the gas,
+        /// the same way a human's key presses would.
+        /// </summary>
+        void UpdateInputKeys()
+        {
+            if (m_KeyWFill == null)
+            {
+                return;
+            }
+
+            var throttle = m_Car.LastThrottleInput;
+            var steer = m_Car.LastSteerInput;
+
+            SetKeyFill(m_KeyWFill, throttle);
+            SetKeyFill(m_KeySFill, -throttle);
+            SetKeyFill(m_KeyAFill, -steer);
+            SetKeyFill(m_KeyDFill, steer);
+        }
+
+        static void SetKeyFill(RectTransform fill, float amount)
+        {
+            fill.anchorMax = new Vector2(1f, Mathf.Clamp01(amount));
         }
 
         void UpdateTimer()
@@ -119,7 +156,7 @@ namespace RacingBotCup.UI
                 return;
             }
 
-            if (m_Car != null && m_Car.transform.position.y > -100f)
+            if (m_Car != null && Eval.ChaseCamera.IsLiveAgentCar(m_Car))
             {
                 return;
             }
@@ -133,8 +170,7 @@ namespace RacingBotCup.UI
 
             foreach (var car in FindObjectsByType<CarController>(FindObjectsSortMode.None))
             {
-                // Parked cars sit far below the circuit; skip them.
-                if (car.transform.position.y > -100f)
+                if (Eval.ChaseCamera.IsLiveAgentCar(car))
                 {
                     SetCar(car);
                     return;
@@ -170,6 +206,11 @@ namespace RacingBotCup.UI
             scaler.referenceResolution = new Vector2(1920f, 1080f);
 
             BuildSpeedometer(canvasObject.transform);
+
+            if (m_ShowInputKeys)
+            {
+                BuildInputKeys(canvasObject.transform);
+            }
 
             if (m_ShowTimer)
             {
@@ -211,6 +252,66 @@ namespace RacingBotCup.UI
             m_BarFill.offsetMin = Vector2.zero;
             m_BarFill.offsetMax = Vector2.zero;
             m_BarFill.gameObject.AddComponent<Image>().color = new Color(0.95f, 0.78f, 0.25f, 0.95f);
+        }
+
+        /// <summary>
+        /// Four key-shaped sliders in the physical WASD layout, sitting directly above the
+        /// speedometer. Each fills from the bottom by how hard that input is currently pressed —
+        /// full for a keyboard tap, partial for whatever fraction a policy's continuous output
+        /// represents.
+        /// </summary>
+        void BuildInputKeys(Transform parent)
+        {
+            const float keySize = 60f;
+            const float gap = 10f;
+            const float padding = 12f;
+            var panelHeight = padding * 2f + keySize * 2f + gap;
+
+            var panel = CreatePanel("InputKeys", parent, new Vector2(1f, 0f),
+                new Vector2(-40f, 40f + 140f + 12f), new Vector2(300f, panelHeight));
+
+            var gridWidth = keySize * 3f + gap * 2f;
+            var left = (300f - gridWidth) * 0.5f;
+            var bottomRow = padding;
+            var topRow = padding + keySize + gap;
+
+            m_KeyWFill = CreateKey("W", panel, new Vector2(left + keySize + gap, topRow), keySize);
+            m_KeyAFill = CreateKey("A", panel, new Vector2(left, bottomRow), keySize);
+            m_KeySFill = CreateKey("S", panel, new Vector2(left + keySize + gap, bottomRow), keySize);
+            m_KeyDFill = CreateKey("D", panel, new Vector2(left + (keySize + gap) * 2f, bottomRow), keySize);
+        }
+
+        /// <summary>
+        /// One key: a dark square anchored by its bottom-left corner at <paramref name="bottomLeft"/>,
+        /// a fill that grows upward from the bottom, and the letter on top of both. Returns the fill
+        /// so the caller can drive it every frame.
+        /// </summary>
+        static RectTransform CreateKey(string letter, Transform parent, Vector2 bottomLeft, float size)
+        {
+            var key = CreateRect("Key" + letter, parent);
+            key.anchorMin = Vector2.zero;
+            key.anchorMax = Vector2.zero;
+            key.pivot = Vector2.zero;
+            key.anchoredPosition = bottomLeft;
+            key.sizeDelta = new Vector2(size, size);
+            key.gameObject.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.15f);
+
+            var fill = CreateRect("Fill", key);
+            fill.anchorMin = Vector2.zero;
+            fill.anchorMax = new Vector2(1f, 0f);
+            fill.offsetMin = Vector2.zero;
+            fill.offsetMax = Vector2.zero;
+            fill.gameObject.AddComponent<Image>().color = k_InputFill;
+
+            var label = CreateText(letter, key, 26, TextAnchor.MiddleCenter);
+            label.rectTransform.anchorMin = Vector2.zero;
+            label.rectTransform.anchorMax = Vector2.one;
+            label.rectTransform.offsetMin = Vector2.zero;
+            label.rectTransform.offsetMax = Vector2.zero;
+            label.text = letter;
+            label.color = k_Dim;
+
+            return fill;
         }
 
         void BuildTimer(Transform parent)

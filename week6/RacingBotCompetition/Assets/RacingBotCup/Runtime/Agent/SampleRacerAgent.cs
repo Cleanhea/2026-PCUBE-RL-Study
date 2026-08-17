@@ -140,5 +140,6 @@ namespace RacingBotCup.Agent
             m_LastProgress = 0f;
             base.OnEpisodeBegin();
         }
+
     }
 }

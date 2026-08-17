@@ -14,11 +14,17 @@ namespace RacingBotCup.Track
     public sealed class TrackInstance : MonoBehaviour
     {
         const string k_GeometryName = "Geometry";
+        const string k_ObstaclesName = "Obstacles";
 
         [Tooltip("Which circuit this is. The same seed always produces the same track.")]
         [SerializeField] int m_Seed = 1000;
 
+        [Tooltip("Allow SharpHairpin/ObstacleStraight/RampCorner sections. Left on for training " +
+                 "variety; evaluation explicitly turns this off so the scored circuits never change shape.")]
+        [SerializeField] bool m_EnableHazardSections = true;
+
         [SerializeField] TrackMaterials m_Materials = new TrackMaterials();
+        [SerializeField] TrackPropCatalogue m_Props = new TrackPropCatalogue();
 
         TrackModel m_Model;
         GeneratedTrack m_Generated;
@@ -30,7 +36,16 @@ namespace RacingBotCup.Track
             set => m_Seed = value;
         }
 
+        /// <summary>Whether hazard sections may appear. Assigning rebuilds nothing on its own — call <see cref="Rebuild"/>.</summary>
+        public bool EnableHazardSections
+        {
+            get => m_EnableHazardSections;
+            set => m_EnableHazardSections = value;
+        }
+
         public TrackMaterials Materials => m_Materials;
+
+        public TrackPropCatalogue Props => m_Props;
 
         /// <summary>Queryable circuit: centreline, width, curvature, typed sections.</summary>
         public TrackModel Model
@@ -67,13 +82,18 @@ namespace RacingBotCup.Track
                 return;
             }
 
-            m_Generated = TrackGenerator.Generate(m_Seed);
+            m_Generated = TrackGenerator.Generate(m_Seed, m_EnableHazardSections);
             m_Model = m_Generated.Model;
             m_Model.Rebase(transform.position);
 
             if (transform.Find(k_GeometryName) == null)
             {
                 BuildGeometry();
+            }
+
+            if (transform.Find(k_ObstaclesName) == null)
+            {
+                BuildObstacles();
             }
         }
 
@@ -93,10 +113,11 @@ namespace RacingBotCup.Track
         /// <summary>Regenerates model and geometry from the current seed.</summary>
         public void Rebuild()
         {
-            m_Generated = TrackGenerator.Generate(m_Seed);
+            m_Generated = TrackGenerator.Generate(m_Seed, m_EnableHazardSections);
             m_Model = m_Generated.Model;
 
             BuildGeometry();
+            BuildObstacles();
 
             // Rebased after the mesh is built: the mesh is generated in the circuit's own space and
             // carried into the world by this transform, while the model holds world coordinates so
@@ -115,6 +136,19 @@ namespace RacingBotCup.Track
             var geometry = TrackMeshBuilder.Build(m_Generated.Model, m_Materials);
             geometry.name = k_GeometryName;
             geometry.transform.SetParent(transform, false);
+        }
+
+        void BuildObstacles()
+        {
+            var existing = transform.Find(k_ObstaclesName);
+            if (existing != null)
+            {
+                DestroySafely(existing.gameObject);
+            }
+
+            var obstacles = TrackObstacleBuilder.Build(m_Generated.Model, m_Props, m_Seed);
+            obstacles.name = k_ObstaclesName;
+            obstacles.transform.SetParent(transform, false);
         }
 
         static void DestroySafely(Object target)

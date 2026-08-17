@@ -31,6 +31,7 @@ namespace RacingBotCup.Racing
         {
             Car.ResetTo(k_ParkingPosition, Quaternion.identity);
             Car.Body.isKinematic = true;
+            Car.IsRacing = false;
         }
 
         /// <summary>
@@ -41,6 +42,7 @@ namespace RacingBotCup.Racing
         {
             Car.Body.isKinematic = false;
             Car.SurfaceProvider = model;
+            Car.IsRacing = true;
 
             var startPose = model.GetStartPose(RaceRules.StartHeightOffset);
             Car.ResetTo(startPose.position, startPose.rotation);

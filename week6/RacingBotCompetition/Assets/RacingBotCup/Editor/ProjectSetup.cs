@@ -23,6 +23,8 @@ namespace RacingBotCup.EditorTools
         {
             Track.TrackTags.Track,
             Track.TrackTags.OffTrack,
+            Track.TrackTags.Obstacle,
+            Track.TrackTags.Ramp,
         };
 
         static ProjectSetup()

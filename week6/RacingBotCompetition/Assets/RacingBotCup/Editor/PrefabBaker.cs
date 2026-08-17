@@ -100,6 +100,8 @@ namespace RacingBotCup.EditorTools
             {
                 TrackTags.Track,
                 TrackTags.OffTrack,
+                TrackTags.Obstacle,
+                TrackTags.Ramp,
             };
 
             // Agent carries [RequireComponent(typeof(BehaviorParameters))], so adding the sample
