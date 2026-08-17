@@ -308,25 +308,25 @@ YAML에 `environment_parameters` 추가:
 
 ```yaml
 environment_parameters:
-  opponent_strength:              # 0=빈 골대/정지 → 1=풀 상대
+  lesson: 
     curriculum:
-      - name: Lesson0_EmptyGoal
+      - name: EmptyGoal
         completion_criteria:
           measure: reward
           behavior: Striker
           signal_smoothing: true
           min_lesson_length: 100
-          threshold: 0.6
+          threshold: 0.4
         value: 0.0
-      - name: Lesson1_WeakOpponent
+      - name: VsGoalie
         completion_criteria:
           measure: reward
           behavior: Striker
           min_lesson_length: 100
           threshold: 0.6
-        value: 0.5
-      - name: Lesson2_FullSelfPlay
         value: 1.0
+      - name: SelfPlay
+        value: 2.0
 ```
 
 **권장 3단계**
