@@ -1,0 +1,24 @@
+behaviors:
+  FoodCollector:                 # Must match Behavior Parameters > Behavior Name
+    trainer_type: ppo            # Policy algorithm
+    hyperparameters:
+      batch_size: 1024
+      buffer_size: 10240         # Multiple of batch_size
+      learning_rate: 5.0e-4
+      beta: 8.0e-3               # Entropy regularization strength
+      epsilon: 0.2               # PPO clipping range
+      lambd: 0.95
+      num_epoch: 3
+    network_settings:
+      normalize: false
+      hidden_units: 128
+      num_layers: 2
+    reward_signals:
+      extrinsic:
+        gamma: 0.99              # Future reward discount factor
+        strength: 1.0
+    checkpoint_interval: 100000
+    keep_checkpoints: 20
+    max_steps: 5000000            # Total training steps
+    time_horizon: 64
+    summary_freq: 10000          # TensorBoard summary interval
