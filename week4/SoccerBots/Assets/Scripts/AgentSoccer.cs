@@ -80,37 +80,31 @@ public class AgentSoccer : MonoBehaviour
         var kb = Keyboard.current;
         if (kb == null) return;
 
+        int[] act = new int[3];
+        act[0] = kb.wKey.isPressed ? 1 : kb.sKey.isPressed ? 2 : 0;
+        act[1] = kb.eKey.isPressed ? 1 : kb.qKey.isPressed ? 2 : 0;
+        act[2] = kb.dKey.isPressed ? 1 : kb.aKey.isPressed ? 2 : 0;
+
         var dirToGo = Vector3.zero;
         var rotateDir = Vector3.zero;
         m_KickPower = 0f;
 
-        if (kb.wKey.isPressed)
+        switch (act[0])
         {
-            dirToGo = transform.forward * m_ForwardSpeed;
-            m_KickPower = 1f;
-        }
-        else if (kb.sKey.isPressed)
-        {
-            dirToGo = transform.forward * -m_ForwardSpeed;
+            case 1: dirToGo = transform.forward * m_ForwardSpeed; m_KickPower=1; break;
+            case 2: dirToGo = transform.forward * -m_ForwardSpeed; break;
         }
 
-        // Strafe overrides forward, matching the original discrete-action move.
-        if (kb.eKey.isPressed)
+        switch (act[1])
         {
-            dirToGo = transform.right * m_LateralSpeed;
-        }
-        else if (kb.qKey.isPressed)
-        {
-            dirToGo = transform.right * -m_LateralSpeed;
+            case 1: dirToGo = transform.right * m_LateralSpeed; break;
+            case 2: dirToGo = transform.right * -m_LateralSpeed; break;
         }
 
-        if (kb.aKey.isPressed)
+        switch (act[2])
         {
-            rotateDir = transform.up * -1f;
-        }
-        else if (kb.dKey.isPressed)
-        {
-            rotateDir = transform.up * 1f;
+            case 1: rotateDir = transform.up * -1f; break;
+            case 2: rotateDir = transform.up * 1f; break;
         }
 
         transform.Rotate(rotateDir, Time.deltaTime * 100f);
