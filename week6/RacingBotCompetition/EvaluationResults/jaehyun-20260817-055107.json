@@ -1,0 +1,126 @@
+{
+  "SchemaVersion": "1.0",
+  "ParticipantId": "jaehyun",
+  "SubmittedAtUtc": "2026-08-17T05:49:27Z",
+  "SeedSetId": "public-v4",
+  "Seeds": [
+    3248,
+    3061,
+    3225,
+    3307,
+    3033,
+    3171,
+    3099,
+    3009,
+    3194,
+    3148
+  ],
+  "Score": {
+    "Total": 1.26862741,
+    "CompletionRate": 1.0,
+    "ScoreStdDev": 0.0259324033,
+    "TrackCount": 10,
+    "Tracks": [
+      {
+        "Seed": 3248,
+        "BaselineTime": 40.1778221,
+        "AgentTime": 31.1920719,
+        "AgentStatus": 0,
+        "BaselineStatus": 0,
+        "Score": 1.28807807,
+        "IsScorable": true
+      },
+      {
+        "Seed": 3061,
+        "BaselineTime": 43.93738,
+        "AgentTime": 34.4226837,
+        "AgentStatus": 0,
+        "BaselineStatus": 0,
+        "Score": 1.27640784,
+        "IsScorable": true
+      },
+      {
+        "Seed": 3225,
+        "BaselineTime": 59.54956,
+        "AgentTime": 45.38118,
+        "AgentStatus": 0,
+        "BaselineStatus": 0,
+        "Score": 1.31220829,
+        "IsScorable": true
+      },
+      {
+        "Seed": 3307,
+        "BaselineTime": 61.4779472,
+        "AgentTime": 47.73498,
+        "AgentStatus": 0,
+        "BaselineStatus": 0,
+        "Score": 1.2879014,
+        "IsScorable": true
+      },
+      {
+        "Seed": 3033,
+        "BaselineTime": 70.73429,
+        "AgentTime": 55.33457,
+        "AgentStatus": 0,
+        "BaselineStatus": 0,
+        "Score": 1.278302,
+        "IsScorable": true
+      },
+      {
+        "Seed": 3171,
+        "BaselineTime": 72.08785,
+        "AgentTime": 56.5200233,
+        "AgentStatus": 0,
+        "BaselineStatus": 0,
+        "Score": 1.27543914,
+        "IsScorable": true
+      },
+      {
+        "Seed": 3099,
+        "BaselineTime": 70.7065048,
+        "AgentTime": 56.74245,
+        "AgentStatus": 0,
+        "BaselineStatus": 0,
+        "Score": 1.24609542,
+        "IsScorable": true
+      },
+      {
+        "Seed": 3009,
+        "BaselineTime": 73.54806,
+        "AgentTime": 60.5007248,
+        "AgentStatus": 0,
+        "BaselineStatus": 0,
+        "Score": 1.2156558,
+        "IsScorable": true
+      },
+      {
+        "Seed": 3194,
+        "BaselineTime": 80.50772,
+        "AgentTime": 64.57091,
+        "AgentStatus": 0,
+        "BaselineStatus": 0,
+        "Score": 1.246811,
+        "IsScorable": true
+      },
+      {
+        "Seed": 3148,
+        "BaselineTime": 83.09199,
+        "AgentTime": 65.97878,
+        "AgentStatus": 0,
+        "BaselineStatus": 0,
+        "Score": 1.25937438,
+        "IsScorable": true
+      }
+    ]
+  },
+  "Integrity": {
+    "CarSpecHash": "f55026a54c03c161",
+    "TrackGeneratorVersion": "3.0.0",
+    "ScoreModuleVersion": "1.0.0",
+    "BaselineBotVersion": "1.0.0",
+    "RulesHash": "2bfe6f357e139a4a",
+    "AgentHash": "RacerAgent/Racer_3",
+    "Checksum": "1e5bea38891b9fd74a06d5e8"
+  },
+  "Note": "test02"
+}

@@ -23,8 +23,8 @@ namespace RacingBotCup.Track
         Esses = 4,
 
         /// <summary>
-        /// A hairpin pulled far tighter than <see cref="Hairpin"/> — interior angle as sharp as
-        /// ~35°. Concrete barrier props fence off the inside apex so the infield can't be cut.
+        /// A hairpin pulled tighter than <see cref="Hairpin"/> — interior angle down to ~53°.
+        /// Concrete barrier props fence off the inside apex so the infield can't be cut.
         /// </summary>
         SharpHairpin = 5,
 
@@ -32,9 +32,9 @@ namespace RacingBotCup.Track
         ObstacleStraight = 6,
 
         /// <summary>
-        /// A corner whose own racing line is pulled tight to the inside, with a ramp on it. There
-        /// is only one line — the ramp is not an alternate path, so a good launch just carries
-        /// speed through what would otherwise be a slow apex.
+        /// A corner sharp enough to be worth not taking, with a ramp sitting off its inside kerb.
+        /// The road round is the safe line; the ramp is a second one, launching a car that leaves
+        /// the road across the infield to rejoin further round.
         /// </summary>
         RampCorner = 7,
     }

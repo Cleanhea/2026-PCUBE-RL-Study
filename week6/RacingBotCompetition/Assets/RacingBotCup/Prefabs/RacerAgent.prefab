@@ -108,6 +108,8 @@ MonoBehaviour:
   m_DetectableTags:
   - Track
   - OffTrack
+  - Obstacle
+  - Ramp
   m_RaysPerDirection: 6
   m_MaxRayDegrees: 65.4
   m_SphereCastRadius: 0.4

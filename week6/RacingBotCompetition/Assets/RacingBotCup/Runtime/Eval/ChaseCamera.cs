@@ -1,4 +1,5 @@
 using RacingBotCup.Agent;
+using RacingBotCup.Racing;
 using RacingBotCup.Vehicle;
 using UnityEngine;
 
@@ -94,13 +95,17 @@ namespace RacingBotCup.Eval
         }
 
         /// <summary>
-        /// True for the competitor's car, and only while it is actually still racing. Three separate
+        /// True for the competitor's car, and only while it is actually still racing. Four separate
         /// conditions, each ruling out one specific kind of car that is not what a spectator wants to
         /// watch:
         /// <list type="bullet">
         /// <item>parked below the world (an idle rig waiting its turn)</item>
-        /// <item>the baseline ghost — it drives itself through <see cref="RacingBotCup.Agent.BaselineBot"/>
-        /// directly on the car, never through a <see cref="RacerAgent"/></item>
+        /// <item>anything wearing a <see cref="GhostCar"/> tag. The baseline would be excluded by the
+        /// last condition anyway — it drives itself through <see cref="RacingBotCup.Agent.BaselineBot"/>
+        /// directly on the car, never through a <see cref="RacerAgent"/> — but a ghost running a
+        /// competitor's own past model does have one, and is otherwise indistinguishable from the
+        /// car it is there to be compared against</item>
+        /// <item>a car with no <see cref="RacerAgent"/> at all</item>
         /// <item>a competitor's car that already finished its seed — sequential evaluation leaves
         /// these sitting rather than destroying them, so without this a re-search can hand the camera
         /// any one of however many have piled up so far, however far away it stopped</item>
@@ -110,6 +115,7 @@ namespace RacingBotCup.Eval
         {
             return car.IsRacing
                 && car.transform.position.y > -100f
+                && car.GetComponent<GhostCar>() == null
                 && car.GetComponentInChildren<RacerAgent>() != null;
         }
     }

@@ -153,6 +153,7 @@ MonoBehaviour:
   m_Car: {fileID: 0}
   m_AutoFindCar: 1
   m_ShowTimer: 1
+  m_ShowInputKeys: 1
 --- !u!114 &37122166
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -393,23 +394,98 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: RacingBotCup.Runtime::RacingBotCup.Eval.RaceEvaluator
   m_ParticipantId: jaehyun
-  m_Note: test02
+  m_Note: test04
   m_AgentPrefab: {fileID: 657716353977145219, guid: 29d6ae13944a1754eb3caae6c9520e63, type: 3}
-  m_Model: {fileID: 5022602860645237092, guid: f432624429df9c84fb0feb1da67e6fd9, type: 3}
+  m_Model: {fileID: 5022602860645237092, guid: 3966e7c279528f4408f8ec53aa3d2e1b, type: 3}
+  m_Ghost:
+    Mode: 0
+    Model: {fileID: 5022602860645237092, guid: 3966e7c279528f4408f8ec53aa3d2e1b, type: 3}
+    AgentPrefab: {fileID: 657716353977145219, guid: 29d6ae13944a1754eb3caae6c9520e63, type: 3}
   m_CarPrefab: {fileID: 2136741189975486067, guid: 04b8c6c407f9ee34083afa4e058f49d0, type: 3}
   m_SeedSetAsset: {fileID: 4900000, guid: 0bdb5156f51ca2b4fbec4d31fdddb9f3, type: 3}
   m_Materials:
     Road: {fileID: 2100000, guid: ee0d6048c2da67340873e5e7d3f0ec4e, type: 2}
     Runoff: {fileID: 2100000, guid: 3e588b5cc43def54d97ba8c071731dce, type: 2}
     Ground: {fileID: 2100000, guid: 5c62a9d4172209e458a05bad0a59666c, type: 2}
+  m_Props:
+    Barriers:
+    - {fileID: 1502597403526910, guid: 3b7419b8b1f36a048b81ccc23552a62f, type: 3}
+    - {fileID: 1097054090422306, guid: dd18674b3304e4b458b18b8a8f3c450d, type: 3}
+    - {fileID: 1560523696118674, guid: d5c46984853775445b62013a1fd94250, type: 3}
+    - {fileID: 1451731582899992, guid: 50ec1958579fd2f49be64209b34320f5, type: 3}
+    - {fileID: 1451731582899992, guid: 50ec1958579fd2f49be64209b34320f5, type: 3}
+    - {fileID: 1451731582899992, guid: 50ec1958579fd2f49be64209b34320f5, type: 3}
+    - {fileID: 1451731582899992, guid: 50ec1958579fd2f49be64209b34320f5, type: 3}
+    - {fileID: 1451731582899992, guid: 50ec1958579fd2f49be64209b34320f5, type: 3}
+    - {fileID: 1451731582899992, guid: 50ec1958579fd2f49be64209b34320f5, type: 3}
+    Crates:
+    - {fileID: 1091073038512112, guid: eeb84bd8651c10045b099b858b99c422, type: 3}
+    - {fileID: 1118739764983148, guid: 5ebfc9f4d719bae49bece6ad4f48e9d2, type: 3}
+    Logs:
+    - {fileID: 1401365376007554, guid: fddbea5f0a39d794095d18336011a980, type: 3}
+    - {fileID: 1495741733393078, guid: c5af164b7d127274788e84e35e7a3905, type: 3}
+    - {fileID: 1554674969729596, guid: 87d53dcf8ae288c4a8e0eff26463b57d, type: 3}
+    Containers:
+    - {fileID: 1251067621055212, guid: 6a063e3f9337d5b438cfae1a2bcc1caa, type: 3}
+    - {fileID: 1670310344640880, guid: a52f8d96d49eae141b16ab3f662f8ea8, type: 3}
+    Ramp: {fileID: 1388776706625344, guid: 7bcc1a8e8d92b8141ad00db183df53e6, type: 3}
   m_SubmissionConfig: {fileID: 11400000, guid: 3481ac8b545e1f846b7c9dca13e33066, type: 2}
-  m_WatchMode: 1
   m_RunOnStart: 1
-  m_Status: idle
-  m_Total: 0
-  m_CompletionRate: 0
-  m_ScoreStdDev: 0
-  m_Results: []
+  m_Status: loaded jaehyun-20260817-173748.json
+  m_Total: 0.6824384
+  m_CompletionRate: 0.5
+  m_ScoreStdDev: 0.6831603
+  m_Results:
+  - Seed: 3248
+    BaselineTime: 40.907204
+    AgentTime: 29.318636
+    Status: 0
+    Score: 1.3952628
+  - Seed: 3061
+    BaselineTime: 44.39468
+    AgentTime: 30.879826
+    Status: 0
+    Score: 1.4376596
+  - Seed: 3225
+    BaselineTime: 98.58822
+    AgentTime: 39.040703
+    Status: 1
+    Score: 0
+  - Seed: 3307
+    BaselineTime: 62.934143
+    AgentTime: 28.02045
+    Status: 1
+    Score: 0
+  - Seed: 3033
+    BaselineTime: 69.24405
+    AgentTime: 52.348305
+    Status: 0
+    Score: 1.3227563
+  - Seed: 3171
+    BaselineTime: 71.22962
+    AgentTime: 53.404675
+    Status: 0
+    Score: 1.3337713
+  - Seed: 3099
+    BaselineTime: 73.78578
+    AgentTime: 221.37047
+    Status: 2
+    Score: 0
+  - Seed: 3009
+    BaselineTime: 73.54775
+    AgentTime: 55.094685
+    Status: 0
+    Score: 1.3349338
+  - Seed: 3194
+    BaselineTime: 91.94399
+    AgentTime: 275.84695
+    Status: 2
+    Score: 0
+  - Seed: 3148
+    BaselineTime: 81.15286
+    AgentTime: 52.52101
+    Status: 1
+    Score: 0
 --- !u!4 &456571911
 Transform:
   m_ObjectHideFlags: 0

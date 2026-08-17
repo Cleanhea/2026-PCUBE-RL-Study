@@ -18,14 +18,29 @@ namespace RacingBotCup.Eval
         /// <summary>Checkpoints per lap. All must be passed in order for the lap to count.</summary>
         public const int CheckpointCount = 24;
 
-        /// <summary>Seconds with all four wheels off the road before the run is abandoned.</summary>
-        public const float OffTrackDnfSeconds = 3f;
+        /// <summary>
+        /// Seconds with all four wheels off the road before the run is abandoned.
+        ///
+        /// Long enough to sit out a full RampCorner shortcut — leaving the road, crossing the
+        /// run-off, the launch itself and the flight over the infield are all off-road time, and at
+        /// the old three seconds that legitimate line was scored as a car that had crashed out.
+        /// </summary>
+        public const float OffTrackDnfSeconds = 6f;
 
-        /// <summary>Agent timeout as a multiple of the baseline bot's time on the same track.</summary>
-        public const float TimeoutMultiplier = 3f;
+        /// <summary>
+        /// Agent timeout as a multiple of the baseline bot's time on the same track. Every run is
+        /// watched start to finish now (see <see cref="Eval.EvaluationRunner"/>), so a stuck agent
+        /// costs real wall-clock time to sit out — lower than 3x trades a little patience for a lot
+        /// less time watching a car that has already lost drive in circles.
+        /// </summary>
+        public const float TimeoutMultiplier = 1.5f;
 
-        /// <summary>Hard ceiling for the baseline's own run, which has no reference to scale from.</summary>
-        public const float BaselineTimeoutSeconds = 600f;
+        /// <summary>
+        /// Hard ceiling for the baseline's own run, which has no reference to scale from. The
+        /// baseline reliably finishes every published seed in under two minutes; this is a backstop
+        /// for a pathological seed, not a number it is expected to approach.
+        /// </summary>
+        public const float BaselineTimeoutSeconds = 120f;
 
         /// <summary>How far above the road the car is placed for a standing start.</summary>
         public const float StartHeightOffset = 0.7f;

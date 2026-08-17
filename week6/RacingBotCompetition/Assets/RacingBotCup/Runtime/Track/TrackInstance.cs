@@ -19,8 +19,9 @@ namespace RacingBotCup.Track
         [Tooltip("Which circuit this is. The same seed always produces the same track.")]
         [SerializeField] int m_Seed = 1000;
 
-        [Tooltip("Allow SharpHairpin/ObstacleStraight/RampCorner sections. Left on for training " +
-                 "variety; evaluation explicitly turns this off so the scored circuits never change shape.")]
+        [Tooltip("Allow SharpHairpin/ObstacleStraight/RampCorner sections. On by default for both " +
+                 "training and evaluation, so the scored circuits include the same hazard mix a policy " +
+                 "trains against.")]
         [SerializeField] bool m_EnableHazardSections = true;
 
         [SerializeField] TrackMaterials m_Materials = new TrackMaterials();

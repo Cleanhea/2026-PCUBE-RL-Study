@@ -142,7 +142,7 @@ namespace RacingBotCup.Agent
 
             if (m_Context.LapCompletedThisTick)
             {
-                RecordEpisodeStats();
+                RecordEpisodeStats(lapCompleted: true);
                 m_Agent.OnLapCompleted(m_Context.ElapsedTime);
                 m_Agent.EndEpisode();
                 return;
@@ -151,17 +151,31 @@ namespace RacingBotCup.Agent
             if (m_Context.OffTrackDuration >= RaceRules.OffTrackDnfSeconds ||
                 m_Context.ElapsedTime >= m_MaxEpisodeSeconds)
             {
-                RecordEpisodeStats();
+                RecordEpisodeStats(lapCompleted: false);
                 m_Agent.OnRunFailed();
                 m_Agent.EndEpisode();
             }
         }
 
-        /// <summary>Reports the final state of every training episode to TensorBoard.</summary>
-        void RecordEpisodeStats()
+        /// <summary>
+        /// Reports the final state of every training episode to TensorBoard.
+        ///
+        /// The clear time is only logged when the lap actually finished. Logging every episode's
+        /// elapsed time mixed real lap times in with runs that went off track after two seconds or
+        /// sat at the timeout ceiling, so the curve tracked how the car failed rather than how fast
+        /// it was. Progress and the clear rate still go in on every episode — the clear rate is what
+        /// says whether a falling clear time means a faster car or just an easier sample of laps.
+        /// </summary>
+        void RecordEpisodeStats(bool lapCompleted)
         {
-            Academy.Instance.StatsRecorder.Add("Episode/Progress", m_Context.Checkpoints.Progress);
-            Academy.Instance.StatsRecorder.Add("Episode/ElapsedSeconds", m_Context.ElapsedTime);
+            var stats = Academy.Instance.StatsRecorder;
+            stats.Add("Episode/Progress", m_Context.Checkpoints.Progress);
+            stats.Add("Episode/ClearRate", lapCompleted ? 1f : 0f);
+
+            if (lapCompleted)
+            {
+                stats.Add("Episode/ClearSeconds", m_Context.ElapsedTime);
+            }
         }
     }
 }

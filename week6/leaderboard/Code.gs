@@ -30,9 +30,12 @@ var CODE_COLUMN_HEADER = '제출 코드';
  * 체크섬 salt. Unity 쪽 SubmissionCodec.k_ChecksumSalt 와 반드시 같아야 합니다.
  * 이건 보안 장치가 아니라 오탈자·수기 편집을 잡는 용도입니다.
  */
-var CHECKSUM_SALT = 'RacingBotCup/2026/score-v1';
+var CHECKSUM_SALT = 'RacingBotCup/2026/score-v2';
 
 var CODE_PREFIX = 'RBC1:';
+
+/** 체크섬용 고정소수점 배율. Unity 쪽 SubmissionCodec.k_QuantizeScale 와 반드시 같아야 합니다. */
+var QUANTIZE_SCALE = 1e6;
 
 // ---------------------------------------------------------------------------
 // 메뉴 / 트리거
@@ -140,7 +143,7 @@ function decodeSubmission(code) {
 
 /**
  * Unity의 SubmissionCodec.CanonicalForm 을 그대로 재현합니다.
- * 실수는 부동소수점 표기가 언어마다 달라지지 않도록 양쪽 모두 소수점 6자리 고정입니다.
+ * 실수는 소수점 문자열이 아니라 정수로 들어갑니다 — 이유는 quantize() 주석을 보세요.
  */
 function canonicalForm(payload) {
   var parts = [];
@@ -155,11 +158,11 @@ function canonicalForm(payload) {
 
   var score = payload.Score;
   if (score) {
-    parts.push(fixed(score.Total));
+    parts.push(quantize(score.Total));
     parts.push('|');
-    parts.push(fixed(score.CompletionRate));
+    parts.push(quantize(score.CompletionRate));
     parts.push('|');
-    parts.push(fixed(score.ScoreStdDev));
+    parts.push(quantize(score.ScoreStdDev));
     parts.push('|');
     parts.push(String(score.TrackCount));
     parts.push('|');
@@ -169,15 +172,15 @@ function canonicalForm(payload) {
       var track = tracks[i];
       parts.push(String(track.Seed));
       parts.push(',');
-      parts.push(fixed(track.BaselineTime));
+      parts.push(quantize(track.BaselineTime));
       parts.push(',');
-      parts.push(fixed(track.AgentTime));
+      parts.push(quantize(track.AgentTime));
       parts.push(',');
       parts.push(String(track.AgentStatus));
       parts.push(',');
       parts.push(String(track.BaselineStatus));
       parts.push(',');
-      parts.push(fixed(track.Score));
+      parts.push(quantize(track.Score));
       parts.push(';');
     }
   }
@@ -292,8 +295,19 @@ function findCodeColumn(headerRow) {
   return -1;
 }
 
-function fixed(value) {
-  return numberOr(value, 0).toFixed(6);
+/**
+ * Unity의 SubmissionCodec.Quantize 와 같은 문자열을 만듭니다.
+ *
+ * 소수점 6자리 문자열(toFixed(6))로 맞추면 안 됩니다. Unity(Mono)의 ToString("F6")은 값의
+ * 15자리 십진 표현을 반올림해서 28.0604515 → "28.060452" 를 주고, JS의 toFixed(6)은 실제
+ * 2진값(28.06045149999999918…)을 반올림해서 "28.060451" 을 줍니다. float32 왕복 표기는
+ * 이 6자리 경계에 자주 걸리기 때문에, 멀쩡한 제출이 계속 '체크섬 불일치'로 떨어졌습니다.
+ *
+ * 그래서 아예 소수점 포맷을 쓰지 않고 IEEE-754 곱셈·덧셈·floor 만으로 정수를 만듭니다.
+ * 이 세 연산은 두 런타임이 비트 단위로 동일합니다.
+ */
+function quantize(value) {
+  return String(Math.floor(numberOr(value, 0) * QUANTIZE_SCALE + 0.5));
 }
 
 function numberOr(value, fallback) {

@@ -64,11 +64,32 @@ namespace RacingBotCup.Racing
         }
 
         /// <summary>
-        /// Renders the car as a translucent ghost. Used for the baseline, which shares the circuit
-        /// with the competitor's car so the two can be compared at a glance.
+        /// Stops the car being drawn without taking it off the circuit — it still laps, and its
+        /// result is still recorded. The baseline needs this when something else is occupying the
+        /// ghost slot: its time is what the score is measured against, so it has to run either way,
+        /// but there is only room on screen for one reference car.
+        /// </summary>
+        public void Hide()
+        {
+            foreach (var renderer in Root.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.enabled = false;
+            }
+        }
+
+        /// <summary>
+        /// Renders the car as a translucent ghost, and tags it as one. Used for whichever car shares
+        /// the circuit with the competitor's as a reference, so the two can be compared at a glance.
         /// </summary>
         public void MakeGhost(float alpha = 0.35f)
         {
+            // The tag, not the transparency, is what keeps the camera and the HUD off it — a ghost
+            // running a policy looks exactly like the competitor's own car to both of them.
+            if (Root.GetComponent<GhostCar>() == null)
+            {
+                Root.AddComponent<GhostCar>();
+            }
+
             foreach (var renderer in Root.GetComponentsInChildren<Renderer>(true))
             {
                 var materials = renderer.materials;

@@ -89,13 +89,13 @@ namespace RacingBotCup.Tests
         }
 
         /// <summary>
-        /// The leaderboard script never sees a C# float's bits — only whatever decimal text
-        /// JSON carried it as, read back as a JS double. float32 holds ~7 significant digits;
-        /// a two-digit lap time needs nine to survive six-decimal formatting, so a native
-        /// <c>float.ToString("F6")</c> and the same value's double-precision JSON reading can
-        /// round differently in the last digit. 62.3456789f/58.7654321f sit past that cliff
-        /// deliberately — 62.5f/58.25f in <see cref="BuildPayload"/> are exact binary fractions
-        /// and would never have caught this.
+        /// The leaderboard script never sees a C# float's bits — only whatever decimal text JSON
+        /// carried it as, read back as a double. This pins the bridge that has to hold for that to
+        /// work: the double <c>SubmissionCodec</c> signs must be the same double the reader parses,
+        /// i.e. <c>float.ToString("R")</c> and the JSON serialiser must emit identical text.
+        /// 62.3456789f/58.7654321f sit past float32's ~7 significant digits deliberately —
+        /// 62.5f/58.25f in <see cref="BuildPayload"/> are exact binary fractions and would never
+        /// have caught this.
         /// </summary>
         [Test]
         public void ChecksumVerifiesUnderADoubleOnlyJsonReader()
@@ -132,7 +132,71 @@ namespace RacingBotCup.Tests
 
             Assert.AreEqual(claimed, recomputed,
                 "A double-precision reader (i.e. the leaderboard's JavaScript) could not " +
-                "reproduce the signed checksum — the float32/double formatting drift is back.");
+                "reproduce the signed checksum — the float32/double drift is back.");
+        }
+
+        /// <summary>
+        /// Pins the canonical form to a value computed outside Unity, so the two halves of
+        /// verification cannot drift into agreeing with each other while disagreeing with the
+        /// leaderboard. The expected digest was produced independently from the same payload under
+        /// JavaScript number semantics; if this fails, <c>Code.gs</c> has to move in step.
+        ///
+        /// Every literal here is chosen so its float32 round-trip text is the same on any runtime
+        /// (seven significant digits or fewer). Values needing eight or nine — which Unity's Mono
+        /// writes as G9 and newer runtimes write shortest — would pin this test to Mono rather than
+        /// to the canonical form.
+        /// </summary>
+        [Test]
+        public void CanonicalFormMatchesTheLeaderboardScript()
+        {
+            var payload = new SubmissionPayload
+            {
+                ParticipantId = "tester",
+                SubmittedAtUtc = "2026-08-15T00:00:00Z",
+                SeedSetId = "public-v1",
+                Seeds = new[] { 1017, 2451 },
+                Score = new AggregateScore
+                {
+                    Total = 1.234567f,
+                    CompletionRate = 0.75f,
+                    ScoreStdDev = 0.0259324f,
+                    TrackCount = 2,
+                    Tracks = new List<TrackScore>
+                    {
+                        new TrackScore
+                        {
+                            Seed = 1017,
+                            BaselineTime = 62.5f,
+                            AgentTime = 43.93738f,
+                            AgentStatus = RunStatus.Finished,
+                            BaselineStatus = RunStatus.Finished,
+                            Score = 1.28779f,
+                        },
+                        new TrackScore
+                        {
+                            Seed = 2451,
+                            BaselineTime = 58.25f,
+                            AgentTime = 22.34032f,
+                            AgentStatus = RunStatus.TimedOut,
+                            BaselineStatus = RunStatus.Finished,
+                            Score = 0f,
+                        },
+                    },
+                },
+                Integrity = new IntegrityBlock
+                {
+                    CarSpecHash = "carspec-hash",
+                    TrackGeneratorVersion = "3.1.0",
+                    ScoreModuleVersion = "1.0.0",
+                    BaselineBotVersion = "1.1.0",
+                    RulesHash = "rules-hash",
+                    AgentHash = "test-agent/heuristic",
+                },
+            };
+
+            Assert.AreEqual("593e742c528d9b633888cc43", SubmissionCodec.ComputeChecksum(payload),
+                "The canonical form changed. Every checksum already on the leaderboard is now " +
+                "stale, and week6/leaderboard/Code.gs has to be updated to match.");
         }
 
         /// <summary>
@@ -140,32 +204,51 @@ namespace RacingBotCup.Tests
         /// the payload's own JSON text with every number read as a double, exactly as
         /// <c>JSON.parse</c> would, instead of through a float-typed field. Intentionally
         /// independent of <c>SubmissionCodec</c>'s internals so it can't share a bug with them.
+        ///
+        /// Numbers are scaled and floored rather than formatted, mirroring <c>Code.gs</c>'s
+        /// <c>quantize()</c> — <c>ToString("F6")</c> here would reproduce Mono's decimal rounding
+        /// and hide exactly the mismatch this test exists to catch.
+        ///
+        /// <c>DateParseHandling.None</c> is what makes this a stand-in for <c>JSON.parse</c> rather
+        /// than for Newtonsoft: left at its default, the reader would recognise SubmittedAtUtc as a
+        /// date, hand back a <c>DateTime</c>, and stringify it through the machine's locale
+        /// ("08/15/2026 00:00:00"). JavaScript does no such thing — a JSON string stays a string.
         /// </summary>
         static string RecomputeChecksumAsADoubleOnlyReaderWould(SubmissionPayload payload)
         {
             var culture = System.Globalization.CultureInfo.InvariantCulture;
-            var json = Newtonsoft.Json.Linq.JObject.Parse(SubmissionCodec.ToJson(payload));
+            JObject json;
+            using (var text = new System.IO.StringReader(SubmissionCodec.ToJson(payload)))
+            using (var reader = new Newtonsoft.Json.JsonTextReader(text)
+                   { DateParseHandling = Newtonsoft.Json.DateParseHandling.None })
+            {
+                json = JObject.Load(reader);
+            }
+
             var score = json["Score"];
             var integrity = json["Integrity"];
+
+            string Quantize(JToken token) =>
+                ((long)System.Math.Floor((double)token * 1e6 + 0.5)).ToString(culture);
 
             var canon = new System.Text.StringBuilder();
             canon.Append((string)json["SchemaVersion"]).Append('|');
             canon.Append((string)json["ParticipantId"]).Append('|');
             canon.Append((string)json["SeedSetId"]).Append('|');
             canon.Append((string)json["SubmittedAtUtc"]).Append('|');
-            canon.Append(((double)score["Total"]).ToString("F6", culture)).Append('|');
-            canon.Append(((double)score["CompletionRate"]).ToString("F6", culture)).Append('|');
-            canon.Append(((double)score["ScoreStdDev"]).ToString("F6", culture)).Append('|');
+            canon.Append(Quantize(score["Total"])).Append('|');
+            canon.Append(Quantize(score["CompletionRate"])).Append('|');
+            canon.Append(Quantize(score["ScoreStdDev"])).Append('|');
             canon.Append((int)score["TrackCount"]).Append('|');
 
             foreach (var track in score["Tracks"])
             {
                 canon.Append((int)track["Seed"]).Append(',');
-                canon.Append(((double)track["BaselineTime"]).ToString("F6", culture)).Append(',');
-                canon.Append(((double)track["AgentTime"]).ToString("F6", culture)).Append(',');
+                canon.Append(Quantize(track["BaselineTime"])).Append(',');
+                canon.Append(Quantize(track["AgentTime"])).Append(',');
                 canon.Append((int)track["AgentStatus"]).Append(',');
                 canon.Append((int)track["BaselineStatus"]).Append(',');
-                canon.Append(((double)track["Score"]).ToString("F6", culture)).Append(';');
+                canon.Append(Quantize(track["Score"])).Append(';');
             }
 
             canon.Append('|');
@@ -175,7 +258,7 @@ namespace RacingBotCup.Tests
             canon.Append((string)integrity["BaselineBotVersion"]).Append(',');
             canon.Append((string)integrity["RulesHash"]).Append(',');
             canon.Append((string)integrity["AgentHash"]);
-            canon.Append('|').Append("RacingBotCup/2026/score-v1");
+            canon.Append('|').Append("RacingBotCup/2026/score-v2");
 
             using (var sha = System.Security.Cryptography.SHA256.Create())
             {
@@ -218,9 +301,9 @@ namespace RacingBotCup.Tests
             // not the one the seed is supposed to name, and everyone is racing it.
             foreach (var seed in SeedSet.Default().Seeds)
             {
-                // Matches EvaluationRunner exactly: hazard sections are always off for the official
-                // seed set, so this is the circuit competitors are actually scored on.
-                var track = TrackGenerator.Generate(seed, enableHazardSections: false);
+                // Matches EvaluationRunner exactly: hazard sections are on for the official seed set,
+                // so this is the circuit competitors are actually scored on.
+                var track = TrackGenerator.Generate(seed, enableHazardSections: true);
                 Assert.IsTrue(track.FullyValid,
                     $"Evaluation seed {seed} produced a relaxed layout: {track.ValidationNote}");
             }

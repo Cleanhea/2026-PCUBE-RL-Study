@@ -44,8 +44,8 @@ namespace RacingBotCup.Vehicle
         public const float SteerRateDegPerSec = 180f;
 
         // ---- Aero ----------------------------------------------------------
-        /// <summary>Quadratic drag (N per (m/s)^2). Caps top speed near 48 m/s.</summary>
-        public const float AeroDragCoefficient = 2.9f;
+        /// <summary>Quadratic drag (N per (m/s)^2). Caps top speed near 50 m/s.</summary>
+        public const float AeroDragCoefficient = 2.7f;
         /// <summary>Downforce (N per (m/s)^2), applied through the centre of mass.</summary>
         public const float DownforceCoefficient = 2.5f;
 
@@ -74,7 +74,14 @@ namespace RacingBotCup.Vehicle
         /// Grip multiplier once a wheel leaves the road. There are no walls on this circuit
         /// (기획서 §5) — going off is punished by losing traction, not by hitting something.
         /// </summary>
-        public const float OffTrackGripMultiplier = 0.45f;
+        public const float OffTrackGripMultiplier = 0.30f;
+
+        /// <summary>
+        /// Extra braking force (N) applied per wheel once it crosses past the gravel run-off band
+        /// onto the grass beyond. Zero anywhere on the run-off strip itself — that band still only
+        /// costs grip, not speed; going fully off the circuit costs both.
+        /// </summary>
+        public const float OffRoadBrakeForce = 3500f;
 
         // ---- Simulation ----------------------------------------------------
         /// <summary>Fixed timestep enforced during evaluation so runs are reproducible.</summary>

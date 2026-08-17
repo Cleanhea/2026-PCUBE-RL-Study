@@ -178,10 +178,19 @@ namespace RacingBotCup.Tests
             Assert.IsTrue(checkedAny, "No ObstacleStraight obstacles turned up in seeds 1..80 to test against.");
         }
 
+        /// <summary>
+        /// The ramp is a shortcut, which pins it between two failures: in the road it is an
+        /// obstacle on the only line, and far out past the run-off it is scenery no car would ever
+        /// reach. Checked over the whole footprint, since the clearance that matters is the
+        /// tightest one anywhere along a rigid prop sat next to a curving kerb, not the one at its
+        /// pivot. It also has to be on the inside of the bend — the outside is the long way round,
+        /// so a ramp there launches a car away from the track rather than across the corner.
+        /// </summary>
         [Test]
-        public void RampSitsOnTheDrivableLine()
+        public void RampSitsJustOffTheInsideKerb()
         {
             var checkedAny = false;
+            var checkedSide = false;
 
             for (var seed = 1; seed <= 80; seed++)
             {
@@ -196,15 +205,67 @@ namespace RacingBotCup.Tests
                     }
 
                     var projection = track.Model.Project(placement.Position);
-                    Assert.IsTrue(projection.IsOnRoad,
-                        $"seed {seed}: ramp at distance {projection.Distance:F1} m is not on the drivable road — " +
-                        "this is the regression guard for RampCorner needing no off-track/checkpoint special-casing.");
+
+                    // Every corner of the prop's footprint, not just its pivot. The kerb curves in
+                    // behind a ramp laid along the apex tangent, so a gap that holds where it is
+                    // measured can still be negative at the foot — which is the end a car arrives
+                    // at, and the end that has to be off the road for this to be a shortcut rather
+                    // than an obstacle.
+                    foreach (var corner in FootprintCorners(placement))
+                    {
+                        var cornerProjection = track.Model.Project(corner);
+                        var gap = Mathf.Abs(cornerProjection.Lateral) - cornerProjection.Width * 0.5f;
+
+                        Assert.Greater(gap, 0.5f,
+                            $"seed {seed}: a corner of the ramp at distance {projection.Distance:F1} m is " +
+                            $"{gap:F2} m from the road edge — the prop is in the road.");
+                        Assert.Less(gap, TrackMeshBuilder.RunoffWidth * 2f,
+                            $"seed {seed}: a corner of the ramp at distance {projection.Distance:F1} m is " +
+                            $"{gap:F1} m past the road edge — that far out it is scenery, not a shortcut.");
+                    }
+
+                    // The midpoint of a short chord across the centreline always falls on the
+                    // concave side of the local arc, so the ramp is on the inside exactly when it
+                    // lies the same way off the centreline as that midpoint does.
+                    var here = track.Model.SampleAtDistance(projection.Distance);
+                    var behind = track.Model.SampleAtDistance(projection.Distance - 6f);
+                    var ahead = track.Model.SampleAtDistance(projection.Distance + 6f);
+                    var chordMid = Vector3.Dot((behind.Position + ahead.Position) * 0.5f - here.Position, here.Right);
+
+                    // Skipped where the road is locally straight, which has no inside to be on.
+                    if (Mathf.Abs(chordMid) > 0.05f)
+                    {
+                        Assert.Greater(chordMid * projection.Lateral, 0f,
+                            $"seed {seed}: ramp at distance {projection.Distance:F1} m is on the outside of its bend.");
+                        checkedSide = true;
+                    }
 
                     checkedAny = true;
                 }
             }
 
             Assert.IsTrue(checkedAny, "No RampCorner ramp turned up in seeds 1..80 to test against.");
+            Assert.IsTrue(checkedSide, "Every ramp landed on a locally straight stretch — the inside check never ran.");
+        }
+
+        /// <summary>
+        /// The four ground corners of a ramp's footprint. Derived from the placement's own rotation
+        /// rather than from the track, so a ramp facing the wrong way fails here too: the prop
+        /// climbs along its local -Z, which is what puts the foot behind the pivot and the lip in
+        /// front of it.
+        /// </summary>
+        static IEnumerable<Vector3> FootprintCorners(ObstaclePlacement placement)
+        {
+            var climb = placement.Rotation * Vector3.back;
+            var side = placement.Rotation * Vector3.right;
+
+            foreach (var along in new[] { TrackObstacleBuilder.RampNoseReach, -TrackObstacleBuilder.RampRearReach })
+            {
+                foreach (var lateral in new[] { TrackObstacleBuilder.RampHalfWidth, -TrackObstacleBuilder.RampHalfWidth })
+                {
+                    yield return placement.Position + climb * along + side * lateral;
+                }
+            }
         }
 
         [Test]

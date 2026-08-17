@@ -1,6 +1,6 @@
 {
-  "Id": "public-v4",
-  "Description": "RacingBot Cup public evaluation seeds — ten circuits, one per evaluation environment. Fixed for the whole event; the finals use private tracks. Each seed produces a fully valid circuit within three attempts, spread across 843-1986 m and 7-13 sections with a mix of hairpins, chicanes and esses.",
+  "Id": "public-v5",
+  "Description": "RacingBot Cup public evaluation seeds — ten circuits, one per evaluation environment. Fixed for the whole event; the finals use private tracks. Each seed produces a fully valid circuit within eight attempts, spread across 843-1986 m and 7-13 sections with a mix of hairpins, chicanes and esses. Hazard sections are on: five of the ten (3225, 3033, 3099, 3194, 3148) include a SharpHairpin, ObstacleStraight and/or RampCorner.",
   "Seeds": [
     3248,
     3061,

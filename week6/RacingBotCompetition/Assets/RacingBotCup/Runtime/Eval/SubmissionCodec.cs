@@ -24,7 +24,7 @@ namespace RacingBotCup.Eval
         /// It exists to catch casual edits, and it is one of the reasons the finals are run by the
         /// organisers on private tracks.
         /// </summary>
-        const string k_ChecksumSalt = "RacingBotCup/2026/score-v1";
+        const string k_ChecksumSalt = "RacingBotCup/2026/score-v2";
 
         public const string CodePrefix = "RBC1:";
 
@@ -34,30 +34,40 @@ namespace RacingBotCup.Eval
         }
 
         /// <summary>
-        /// Canonical text the checksum is taken over. Order and formatting must never drift.
-        ///
-        /// Floats use fixed six-decimal formatting rather than round-trip ("R") notation so the
-        /// leaderboard script can rebuild this exact string in JavaScript — round-trip formatting
-        /// differs between the two languages and would fail verification on valid submissions.
+        /// Six decimal places, the precision the leaderboard compares at, expressed as the scale a
+        /// value is multiplied by before it becomes a canonical integer. See <see cref="Quantize"/>
+        /// for why the canonical form carries integers instead of formatted decimals.
         /// </summary>
-        const string k_FloatFormat = "F6";
+        const double k_QuantizeScale = 1e6;
 
         /// <summary>
-        /// Formats a float the way the leaderboard script necessarily will: it never sees the
+        /// Renders a float the way the leaderboard script necessarily must: it never sees the
         /// float bits, only whatever decimal text JSON carried them as, parsed back as a JS
-        /// double. <c>value.ToString("F6")</c> rounds the *true* float32 value instead, which for
-        /// anything needing more than float32's ~7 significant digits (a two-digit lap time to
-        /// six decimals is nine) lands on different last-digit noise than the double reconstructed
-        /// from that same value's round-trip text — silently breaking every such checksum. Routing
-        /// through the round-trip string first, the same value JSON would carry, keeps both sides
-        /// rounding the identical number.
+        /// double. Two conversions have to survive that gap.
+        ///
+        /// The first is float32 → double. Going via the round-trip string — the same text JSON
+        /// carries — rebuilds the exact double the reader gets, where a plain widening cast would
+        /// hand us a different, wider number.
+        ///
+        /// The second is double → text, and it has no safe crossing. Unity's Mono rounds
+        /// <c>ToString("F6")</c> off the value's 15-digit decimal form, so 28.0604515 becomes
+        /// "28.060452"; JavaScript's <c>toFixed(6)</c> rounds the true binary value
+        /// (28.06045149999999918…) and gets "28.060451". Every six-decimal midpoint — and float32
+        /// round-trip text lands on one often — broke verification on a perfectly honest
+        /// submission. So the canonical form formats no decimals at all: it scales and floors into
+        /// an integer using only IEEE-754 multiply, add and floor, which both runtimes compute
+        /// bit for bit alike.
         /// </summary>
-        static string FormatFloat(float value, CultureInfo culture)
+        static string Quantize(float value, CultureInfo culture)
         {
-            var roundTripText = value.ToString("R", culture);
-            return double.Parse(roundTripText, culture).ToString(k_FloatFormat, culture);
+            var asDouble = double.Parse(value.ToString("R", culture), culture);
+            return ((long)Math.Floor(asDouble * k_QuantizeScale + 0.5)).ToString(culture);
         }
 
+        /// <summary>
+        /// Canonical text the checksum is taken over. Order and layout must never drift — the
+        /// leaderboard script rebuilds this exact string in JavaScript to verify a submission.
+        /// </summary>
         static string CanonicalForm(SubmissionPayload payload)
         {
             var culture = CultureInfo.InvariantCulture;
@@ -70,19 +80,19 @@ namespace RacingBotCup.Eval
 
             if (payload.Score != null)
             {
-                builder.Append(FormatFloat(payload.Score.Total, culture)).Append('|');
-                builder.Append(FormatFloat(payload.Score.CompletionRate, culture)).Append('|');
-                builder.Append(FormatFloat(payload.Score.ScoreStdDev, culture)).Append('|');
+                builder.Append(Quantize(payload.Score.Total, culture)).Append('|');
+                builder.Append(Quantize(payload.Score.CompletionRate, culture)).Append('|');
+                builder.Append(Quantize(payload.Score.ScoreStdDev, culture)).Append('|');
                 builder.Append(payload.Score.TrackCount.ToString(culture)).Append('|');
 
                 foreach (var track in payload.Score.Tracks)
                 {
                     builder.Append(track.Seed.ToString(culture)).Append(',');
-                    builder.Append(FormatFloat(track.BaselineTime, culture)).Append(',');
-                    builder.Append(FormatFloat(track.AgentTime, culture)).Append(',');
+                    builder.Append(Quantize(track.BaselineTime, culture)).Append(',');
+                    builder.Append(Quantize(track.AgentTime, culture)).Append(',');
                     builder.Append(((int)track.AgentStatus).ToString(culture)).Append(',');
                     builder.Append(((int)track.BaselineStatus).ToString(culture)).Append(',');
-                    builder.Append(FormatFloat(track.Score, culture)).Append(';');
+                    builder.Append(Quantize(track.Score, culture)).Append(';');
                 }
             }
 

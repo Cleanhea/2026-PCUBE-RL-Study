@@ -20,10 +20,18 @@ namespace RacingBotCup.Vehicle
         /// <summary>Multiplier applied to tyre friction stiffness. 1 on tarmac, lower off-track.</summary>
         public readonly float GripMultiplier;
 
-        public SurfaceSample(bool onTrack, float gripMultiplier)
+        /// <summary>
+        /// Extra braking force (N) this wheel contributes, opposing the car's velocity. Zero on
+        /// tarmac and on the run-off strip — only once a wheel is fully off, past the run-off band,
+        /// does the terrain itself start costing speed rather than just grip.
+        /// </summary>
+        public readonly float OffRoadBrakeForce;
+
+        public SurfaceSample(bool onTrack, float gripMultiplier, float offRoadBrakeForce = 0f)
         {
             OnTrack = onTrack;
             GripMultiplier = gripMultiplier;
+            OffRoadBrakeForce = offRoadBrakeForce;
         }
 
         /// <summary>Fallback used when no provider is attached: full grip everywhere.</summary>

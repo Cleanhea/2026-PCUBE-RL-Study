@@ -101,6 +101,21 @@ namespace RacingBotCup.Track
         const float k_SectionEdgeMargin = 0.12f;
         const float k_RampScanStep = 2f;
 
+        /// <summary>Half the ramp prop's width — SM_Prop_Ramp_Mesh_01 measures 5.8 m across.</summary>
+        public const float RampHalfWidth = 2.95f;
+
+        /// <summary>How far the ramp's take-off lip reaches ahead of its pivot.</summary>
+        public const float RampNoseReach = 2.25f;
+
+        /// <summary>How far the ramp's foot reaches back behind its pivot.</summary>
+        public const float RampRearReach = 4.75f;
+
+        /// <summary>
+        /// Clear road left between the kerb and the ramp's near side. Held along the prop's whole
+        /// length rather than only where it is measured — see <see cref="RampInsideClearance"/>.
+        /// </summary>
+        public const float RampKerbGap = 1.5f;
+
         public static List<ObstaclePlacement> ComputePlacements(TrackModel model, int seed)
         {
             var placements = new List<ObstaclePlacement>();
@@ -169,7 +184,6 @@ namespace RacingBotCup.Track
                 return;
             }
 
-            var insideSign = InsideSign(model, section);
             var steps = Mathf.Max(1, Mathf.RoundToInt((end - start) / k_BarrierSpacing));
 
             for (var i = 0; i <= steps; i++)
@@ -177,29 +191,49 @@ namespace RacingBotCup.Track
                 var distance = start + (end - start) * (i / (float)steps);
                 var sample = model.SampleAtDistance(distance);
 
+                // Local, not once for the whole section: a hairpin's own curve can wobble (an
+                // over-tight vertex pull briefly bending the other way before recovering) enough
+                // that a single section-wide inside direction stops matching the actual concave
+                // side partway through, and the fence visibly cuts across the road right where that
+                // happens instead of hugging either kerb.
+                var insideSign = InsideSignAt(model, distance);
                 var offset = sample.Width * 0.5f + k_BarrierMargin;
                 var position = sample.Position - insideSign * sample.Right * offset;
-                var rotation = Quaternion.LookRotation(sample.Forward, Vector3.up);
+
+                // SM_Prop_Barrier_Concrete's long axis is local X, not the Z that LookRotation
+                // aligns to Forward (confirmed against the mesh's own bounds) — without this the
+                // barrier's long side lies across the road instead of along the kerb it's meant to
+                // fence.
+                var rotation = Quaternion.LookRotation(sample.Forward, Vector3.up) * Quaternion.Euler(0f, -90f, 0f);
 
                 placements.Add(new ObstaclePlacement(position, rotation, ObstacleKind.Barrier, random.NextUInt()));
             }
         }
 
+        /// <summary>Local window used to judge which way the road is curving at a single point.</summary>
+        const float k_InsideSignWindow = 6f;
+
         /// <summary>
-        /// Which side of the centreline is the inside of the bend, found geometrically rather than
-        /// by trusting a curvature-sign convention: the midpoint of the chord between a section's
-        /// start and end always falls on the concave (inside) side of a simple single-bend arc.
+        /// Which sign, in <c>Position - insideSign*Right*offset</c>, moves toward the inside of the
+        /// bend at <paramref name="distance"/> — found geometrically rather than by trusting a
+        /// curvature-sign convention: the midpoint of the chord between a point a little behind and
+        /// a little ahead always falls on the concave (inside) side of the local arc, so the
+        /// direction from the road at <paramref name="distance"/> toward that chord midpoint IS the
+        /// inside direction. That direction is <c>+Right*Sign(dot)</c> (not <c>-Right*Sign(dot)</c>
+        /// — verified by hand against a worked quarter-circle example, left and right turns both),
+        /// which is why this returns the sign negated: the call site subtracts, so the sign returned
+        /// has to be the one that makes subtracting land inside.
         /// </summary>
-        static float InsideSign(TrackModel model, TrackSection section)
+        static float InsideSignAt(TrackModel model, float distance)
         {
-            var startSample = model.SampleAtDistance(section.StartDistance);
-            var endSample = model.SampleAtDistance(section.EndDistance);
-            var midSample = model.SampleAtDistance((section.StartDistance + section.EndDistance) * 0.5f);
+            var behind = model.SampleAtDistance(distance - k_InsideSignWindow);
+            var ahead = model.SampleAtDistance(distance + k_InsideSignWindow);
+            var here = model.SampleAtDistance(distance);
 
-            var chordMid = (startSample.Position + endSample.Position) * 0.5f;
-            var dot = Vector3.Dot(chordMid - midSample.Position, midSample.Right);
+            var chordMid = (behind.Position + ahead.Position) * 0.5f;
+            var dot = Vector3.Dot(chordMid - here.Position, here.Right);
 
-            return Mathf.Abs(dot) < 1e-4f ? 1f : Mathf.Sign(dot);
+            return Mathf.Abs(dot) < 1e-4f ? -1f : -Mathf.Sign(dot);
         }
 
         /// <summary>
@@ -261,8 +295,9 @@ namespace RacingBotCup.Track
         }
 
         /// <summary>
-        /// One ramp, at the point of tightest curvature within a RampCorner — the apex of the
-        /// section's own (already inward-pulled) racing line.
+        /// One ramp, just off the inside kerb at the point of tightest curvature within a
+        /// RampCorner — off the road, in the infield the bend encloses, so taking it is a shortcut
+        /// rather than the only line through the section.
         /// </summary>
         static void PlaceRamp(TrackModel model, TrackSection section, List<ObstaclePlacement> placements)
         {
@@ -288,8 +323,51 @@ namespace RacingBotCup.Track
             }
 
             var apex = model.SampleAtDistance(bestDistance);
-            var rotation = Quaternion.LookRotation(apex.Forward, Vector3.up);
-            placements.Add(new ObstaclePlacement(apex.Position, rotation, ObstacleKind.Ramp, 0u));
+
+            // Same construction as the hairpin fence, and the inside is measured locally for the
+            // same reason: a section's own curve can wobble enough that one direction taken for the
+            // whole section stops matching the concave side at the apex itself.
+            var insideSign = InsideSignAt(model, bestDistance);
+            var clearance = RampInsideClearance(apex.Curvature, apex.Width);
+            var position = apex.Position - insideSign * apex.Right * (apex.Width * 0.5f + clearance);
+
+            // Aiming the launch along the apex tangent is what makes this a shortcut instead of a
+            // jump into the scenery: a line parallel to the tangent and offset toward the inside is
+            // a chord of the corner, so a car that gets airborne here comes back down on the road
+            // further round rather than deeper into the infield.
+            //
+            // The flip is the mesh's, not the maths': SM_Prop_Ramp_Mesh_01 rises toward its local
+            // -Z (its lip sits at the mesh's minimum Z, its foot at the maximum — measured off the
+            // mesh's own vertices), which is the opposite end to the +Z that LookRotation aligns to
+            // Forward. Without it the ramp faces back down the road and the car meets the drop-off
+            // face head on.
+            var rotation = Quaternion.LookRotation(apex.Forward, Vector3.up) * Quaternion.Euler(0f, 180f, 0f);
+
+            placements.Add(new ObstaclePlacement(position, rotation, ObstacleKind.Ramp, 0u));
+        }
+
+        /// <summary>
+        /// How far past the road edge, on the inside of the bend, a ramp is centred at an apex of
+        /// the given centreline curvature and width.
+        ///
+        /// A flat number does not work here. The prop is a rigid 5.8 x 7 m box laid along the
+        /// tangent at one point, while the kerb it has to clear keeps curving in behind it: over
+        /// the prop's own length the inside edge closes by roughly <c>reach^2 / 2r</c>, which on the
+        /// tightest corners this generator produces is more than a metre — so a gap measured at the
+        /// pivot alone leaves the ramp's foot standing in the road, which is exactly where a car
+        /// arrives. The curvature term is that closing distance, which is what holds the gap
+        /// constant along the prop instead of only where it happens to be measured.
+        ///
+        /// Measured against the inside kerb's radius rather than the centreline's, because that is
+        /// the edge being cleared, and on a tight corner it is appreciably tighter than the
+        /// centreline the offset is built from.
+        /// </summary>
+        public static float RampInsideClearance(float curvature, float width)
+        {
+            var centreRadius = Mathf.Abs(curvature) > 1e-4f ? 1f / Mathf.Abs(curvature) : float.MaxValue;
+            var kerbRadius = Mathf.Max(RampRearReach, centreRadius - width * 0.5f);
+
+            return RampKerbGap + RampHalfWidth + RampRearReach * RampRearReach / (2f * kerbRadius);
         }
     }
 }

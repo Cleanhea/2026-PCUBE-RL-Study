@@ -30,6 +30,7 @@ namespace RacingBotCup.Vehicle
         float m_SteerInput;
         float m_ThrottleInput;
         float m_CurrentSteerAngle;
+        float m_OffRoadBrakeForce;
 
         /// <summary>Assigned by the track/harness. Null means "assume tarmac everywhere".</summary>
         public ISurfaceProvider SurfaceProvider { get; set; }
@@ -172,6 +173,7 @@ namespace RacingBotCup.Vehicle
             LocalAngularVelocity = Vector3.zero;
             SlipAngle = 0f;
             WheelsOffTrack = 0;
+            m_OffRoadBrakeForce = 0f;
 
             foreach (var wheel in m_Wheels)
             {
@@ -211,6 +213,7 @@ namespace RacingBotCup.Vehicle
             ApplySteering(deltaTime);
             ApplyDrive();
             ApplyAero();
+            ApplyOffRoadDrag();
             UpdateVisuals();
         }
 
@@ -231,6 +234,7 @@ namespace RacingBotCup.Vehicle
         {
             var provider = SurfaceProvider;
             var offCount = 0;
+            var brakeForceSum = 0f;
 
             foreach (var wheel in m_Wheels)
             {
@@ -248,10 +252,13 @@ namespace RacingBotCup.Vehicle
                     offCount++;
                 }
 
+                brakeForceSum += sample.OffRoadBrakeForce;
+
                 ApplyGrip(wheel, sample.GripMultiplier);
             }
 
             WheelsOffTrack = offCount;
+            m_OffRoadBrakeForce = brakeForceSum;
         }
 
         void ApplySteering(float deltaTime)
@@ -318,6 +325,21 @@ namespace RacingBotCup.Vehicle
                 var dragDirection = -m_Body.linearVelocity / Speed;
                 m_Body.AddForce(dragDirection * (CarSpec.AeroDragCoefficient * speedSquared));
             }
+        }
+
+        /// <summary>
+        /// Resistive force from driving on the grass beyond the run-off band. Summed across
+        /// however many wheels are out there, so two wheels off costs half what four does.
+        /// </summary>
+        void ApplyOffRoadDrag()
+        {
+            if (m_OffRoadBrakeForce <= 0f || Speed < 0.01f)
+            {
+                return;
+            }
+
+            var dragDirection = -m_Body.linearVelocity / Speed;
+            m_Body.AddForce(dragDirection * m_OffRoadBrakeForce);
         }
 
         void UpdateVisuals()

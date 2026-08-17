@@ -287,9 +287,9 @@ namespace RacingBotCup.Track
 
                 case TrackSectionType.RampCorner:
                 {
-                    // Same shape as Corner, but the bulge is inward-only and much larger: this
-                    // pulls the section's one and only line tight to the inside, with the ramp
-                    // sitting on it — there is no separate "shortcut" path to reason about.
+                    // Same shape as Corner, but the bulge is inward-only and much larger, so the
+                    // road takes a decidedly long way round. That is what gives the ramp off the
+                    // inside kerb something to be a shortcut to.
                     var bulge = -length * trackParams.RampCornerThrow;
                     var steps = Mathf.Max(2, Mathf.RoundToInt(length / k_SampleSpacing));
 
@@ -322,12 +322,28 @@ namespace RacingBotCup.Track
                     // `outward` points away from the circuit's centre, not necessarily
                     // perpendicular to *this section's own chord*. A pull with any component
                     // *along* forward drags the vertex off the chord's perpendicular bisector and
-                    // produces an uncontrolled angle instead of the one asked for. Projecting that
-                    // component out keeps the pull perpendicular, matching the angle formula below.
+                    // produces an uncontrolled angle instead of the one asked for (verified in
+                    // isolation: a perpendicular pull lands the interior angle within 2° of
+                    // 2*atan(0.5/reach); a skewed one does not). Projecting that component out
+                    // keeps the pull perpendicular, matching the angle formula.
+                    //
+                    // Several self-contained constructions were tried here to reach interior angles
+                    // as tight as ~30° without leaning on SmoothClosed for the junctions (a cubic
+                    // Hermite blend, a multi-arc turn-then-straight chain) — all of them, even where
+                    // every individual piece used a safe, generous radius, still came out badly
+                    // distorted after SmoothClosed + the spline's AutoSmooth: this generator's
+                    // pipeline tolerates one curvature *transition* well (that is what it was built
+                    // for) but not several close together, however gentle each one is on its own.
+                    // EmitRoundedCorner keeps that count to the two this pipeline already handles
+                    // for the plain Hairpin below; SharpHairpinReach is tuned to a range that stays
+                    // reliably valid with it rather than to the tightest angle the vertex math alone
+                    // would allow.
                     var outwardPerp = outward - forward * Vector3.Dot(outward, forward);
                     outwardPerp = outwardPerp.sqrMagnitude > 1e-6f ? outwardPerp.normalized : lateral;
 
-                    EmitSharpHairpin(points, from, to, forward, outwardPerp, length, trackParams);
+                    var vertex = middle - outwardPerp * (length * trackParams.SharpHairpinReach);
+                    var radius = Mathf.Max(TrackParams.SharpHairpinMinRadius * 1.3f, 9f);
+                    EmitRoundedCorner(points, from, vertex, to, radius);
                     break;
                 }
 
@@ -451,122 +467,6 @@ namespace RacingBotCup.Track
             }
 
             EmitLine(points, arcEnd, to, sampleSpacing);
-        }
-
-        /// <summary>
-        /// A tight, self-contained hairpin: the same rounded-tip construction as
-        /// <see cref="EmitRoundedCorner"/>, but with each straight leg replaced by a cubic Hermite
-        /// blend from the neighbouring section's own direction into the leg's.
-        ///
-        /// Every other corner type hands its junctions to <see cref="SmoothClosed"/>'s generic
-        /// 3-point blend, which works because their entry/exit tangents only deviate a little from
-        /// the chord (<c>forward</c>). SharpHairpin's entry leg points up to ~140° away from it —
-        /// a deviation that large, concentrated at a single knot shared with a neighbour who has no
-        /// idea it is coming, is exactly what a corner-cutting blur eats: measured across dozens of
-        /// seeds with <see cref="EmitRoundedCorner"/> here instead, the smoothed result kept only a
-        /// fraction of the turn the vertex geometry actually called for. Spreading that same turn
-        /// out over a curve this method already draws smoothly — starting and ending tangent to
-        /// <c>forward</c>, so it reads as an ordinary approach and exit to every section around it
-        /// — leaves <see cref="SmoothClosed"/> nothing destructive left to do.
-        /// </summary>
-        static void EmitSharpHairpin(
-            List<float3> points, Vector3 from, Vector3 to, Vector3 forward, Vector3 outwardPerp,
-            float length, TrackParams trackParams)
-        {
-            var middle = (from + to) * 0.5f;
-            var vertex = middle - outwardPerp * (length * trackParams.SharpHairpinReach);
-
-            var toStart = from - vertex;
-            var toEnd = to - vertex;
-
-            var legIn = toStart.magnitude;
-            var legOut = toEnd.magnitude;
-            if (legIn < 1e-3f || legOut < 1e-3f)
-            {
-                EmitLine(points, from, to);
-                return;
-            }
-
-            var dirIn = toStart / legIn;
-            var dirOut = toEnd / legOut;
-
-            var interior = Vector3.Angle(dirIn, dirOut) * Mathf.Deg2Rad;
-            if (interior < 0.08f || interior > Mathf.PI - 0.08f)
-            {
-                EmitLine(points, from, to);
-                return;
-            }
-
-            var radius = Mathf.Max(TrackParams.SharpHairpinMinRadius * 1.3f, 9f);
-
-            // Capped tighter than EmitRoundedCorner's 0.85 — the outer part of each leg belongs to
-            // the Hermite blend below, not to a straight run at the tip's own radius.
-            var tangent = Mathf.Min(radius / Mathf.Tan(interior * 0.5f), Mathf.Min(legIn, legOut) * 0.6f);
-            var arcStart = vertex + dirIn * tangent;
-            var arcEnd = vertex + dirOut * tangent;
-
-            var bisector = (dirIn + dirOut).normalized;
-            var centre = vertex + bisector * (tangent / Mathf.Cos(interior * 0.5f));
-
-            // One spacing for the whole section, Hermite blends included — Unity's spline AutoSmooth
-            // infers a knot's tangent from how far its neighbours are, so a jump in point spacing
-            // (the Hermite blend's, well short of the arc's) reads as exactly the kind of uneven
-            // knot run that overshoots into a cusp on its own, independently of how carefully this
-            // method's own polyline tangent was kept continuous.
-            var spacing = Mathf.Min(k_SampleSpacing, radius * 0.35f);
-
-            // from (heading forward, same as whatever the previous section left off heading) blends
-            // into arcStart (heading -dirIn, into the tip).
-            EmitHermite(points, from, forward, arcStart, -dirIn, spacing);
-
-            var startArm = arcStart - centre;
-            var sweep = Vector3.SignedAngle(startArm, arcEnd - centre, Vector3.up);
-            var arcLength = Mathf.Abs(sweep) * Mathf.Deg2Rad * startArm.magnitude;
-            var arcSteps = Mathf.Max(3, Mathf.RoundToInt(arcLength / spacing));
-
-            for (var i = 0; i < arcSteps; i++)
-            {
-                points.Add(centre + Quaternion.AngleAxis(sweep * (i / (float)arcSteps), Vector3.up) * startArm);
-            }
-
-            // arcEnd (heading dirOut, out of the tip) blends back into `to` heading forward again —
-            // matching whatever the next section expects to find waiting for it there.
-            EmitHermite(points, arcEnd, dirOut, to, forward, spacing);
-        }
-
-        /// <summary>
-        /// Cubic Hermite segment from <paramref name="from"/> (tangent <paramref name="fromDir"/>)
-        /// to <paramref name="to"/> (tangent <paramref name="toDir"/>), sampled from (but excluding)
-        /// <paramref name="from"/> up to (but excluding) <paramref name="to"/> — the same half-open
-        /// convention as <see cref="EmitLine"/>, so callers can chain it with other emitters. Tangent
-        /// vectors are scaled to the chord length, the usual choice that keeps the curve well-behaved
-        /// (no overshoot loop) even when the two directions are wildly different.
-        /// </summary>
-        static void EmitHermite(List<float3> points, Vector3 from, Vector3 fromDir, Vector3 to, Vector3 toDir, float spacing)
-        {
-            var chord = Vector3.Distance(from, to);
-            if (chord < 1e-3f)
-            {
-                return;
-            }
-
-            var t0 = fromDir.normalized * chord;
-            var t1 = toDir.normalized * chord;
-            var steps = Mathf.Max(4, Mathf.RoundToInt(chord / spacing));
-
-            for (var i = 0; i < steps; i++)
-            {
-                var t = i / (float)steps;
-                var t2 = t * t;
-                var t3 = t2 * t;
-
-                var h00 = 2f * t3 - 3f * t2 + 1f;
-                var h10 = t3 - 2f * t2 + t;
-                var h01 = -2f * t3 + 3f * t2;
-                var h11 = t3 - t2;
-
-                points.Add(from * h00 + t0 * h10 + to * h01 + t1 * h11);
-            }
         }
 
         /// <summary>

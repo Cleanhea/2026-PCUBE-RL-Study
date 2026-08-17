@@ -50,6 +50,13 @@ namespace RacingBotCup.Track
             }
 
             public bool IsOnRoad => Mathf.Abs(Lateral) <= Width * 0.5f;
+
+            /// <summary>
+            /// True once past the gravel run-off band, out on the grass. The run-off strip itself
+            /// (<see cref="IsOnRoad"/> false but this false too) is the forgiving buffer; this is
+            /// "actually off the circuit".
+            /// </summary>
+            public bool IsBeyondRunoff => Mathf.Abs(Lateral) > Width * 0.5f + TrackMeshBuilder.RunoffWidth;
         }
 
         const float k_SampleSpacing = 0.5f;
@@ -413,9 +420,13 @@ namespace RacingBotCup.Track
         public SurfaceSample SampleSurface(Vector3 worldPosition)
         {
             var projection = Project(worldPosition);
-            return projection.IsOnRoad
-                ? new SurfaceSample(true, 1f)
-                : new SurfaceSample(false, CarSpec.OffTrackGripMultiplier);
+            if (projection.IsOnRoad)
+            {
+                return SurfaceSample.Tarmac;
+            }
+
+            var brakeForce = projection.IsBeyondRunoff ? CarSpec.OffRoadBrakeForce : 0f;
+            return new SurfaceSample(false, CarSpec.OffTrackGripMultiplier, brakeForce);
         }
 
         /// <summary>Pose a car should start from: on the centreline at distance 0, facing forwards.</summary>

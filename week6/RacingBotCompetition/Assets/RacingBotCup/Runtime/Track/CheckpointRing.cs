@@ -96,9 +96,10 @@ namespace RacingBotCup.Track
             if (!onRoad && delta > 0f)
             {
                 // Distance covered off the road still counts towards the lap, but no checkpoint is
-                // credited until the car is back on it. Running wide through a corner therefore
-                // costs nothing, while a lap driven entirely off-track is impossible anyway — the
-                // three-second DNF rule ends it long before a full loop.
+                // credited until the car is back on it. Running wide through a corner — or taking
+                // the ramp shortcut off a RampCorner's inside kerb — therefore costs nothing, while
+                // a lap driven entirely off-track is impossible anyway: the DNF rule ends it long
+                // before a full loop.
                 m_Traveled += delta;
                 return false;
             }

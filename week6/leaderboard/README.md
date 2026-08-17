@@ -51,8 +51,10 @@ Google Form을 새로 만들고 질문 2개를 둡니다.
 ```js
 var RESPONSE_SHEET = '설문지 응답 시트1';   // 실제 응답 시트 이름
 var CODE_COLUMN_HEADER = '제출 코드';        // 제출 코드 질문 제목
-var CHECKSUM_SALT = 'RacingBotCup/2026/score-v1';  // Unity 쪽과 동일해야 함
+var CHECKSUM_SALT = 'RacingBotCup/2026/score-v2';  // Unity 쪽과 동일해야 함
 ```
+
+`Code.gs` 와 Unity의 `SubmissionCodec.cs` 는 **한 쌍으로 움직입니다.** 체크섬을 만드는 정규화 문자열이 바뀌면 salt 끝의 `-vN` 도 같이 올라가니, 둘 중 하나만 갱신하면 모든 제출이 `⚠ 체크섬 불일치` 로 떨어집니다. 스타터 킷을 새로 배포할 때는 시트의 스크립트도 같이 붙여 넣으세요.
 
 4. 트리거 추가: **트리거 → 트리거 추가 → `onFormSubmit` / 스프레드시트에서 / 양식 제출 시**
 
@@ -75,6 +77,7 @@ var CHECKSUM_SALT = 'RacingBotCup/2026/score-v1';  // Unity 쪽과 동일해야 
 - 참가자가 구버전 프로젝트로 채점
 - `CarSpec` · `RaceRules` · `ScoreAggregator` 를 수정한 채 실행
 - `CHECKSUM_SALT` 가 Unity 쪽과 다르게 설정됨 (운영진 실수)
+- 시트의 `Code.gs` 가 배포된 스타터 킷보다 오래됨 (운영진 실수 — 위 §2 참고)
 
 먼저 **다시 제출하도록 요청**하세요. 그래도 어긋나면 `무결성` 열 옆의 해시들을 비교해 어떤 모듈이 다른지 특정할 수 있습니다.
 

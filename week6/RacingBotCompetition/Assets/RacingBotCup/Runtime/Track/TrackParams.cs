@@ -53,18 +53,20 @@ namespace RacingBotCup.Track
         /// <summary>
         /// Reach of a <see cref="TrackSectionType.SharpHairpin"/>'s vertex pull, as a fraction of
         /// its chord length. The interior angle at the vertex is <c>2*atan(0.5/SharpHairpinReach)</c>
-        /// — the sampled range targets roughly 32°-53°, well past an ordinary hairpin's own ~68°-87°.
-        /// SharpHairpin draws its own hand-off to the sections on either side of it (see
-        /// <see cref="TrackGenerator.EmitSharpHairpin"/>) rather than leaning on the generic
-        /// junction-smoothing every other corner shares, which is what makes a reach this aggressive
-        /// survive as an actual tight turn instead of being smoothed back down to a shallow wiggle.
+        /// — the sampled range targets roughly 53°-70°, tighter than an ordinary hairpin's own
+        /// ~68°-87° without pulling hard enough to fight <see cref="TrackGenerator.SmoothClosed"/>
+        /// and the spline's auto tangents into eroding the turn back down or failing curvature
+        /// validation outright — both of which several more aggressive reach ranges and several
+        /// self-contained junction constructions ran into in practice (see
+        /// <see cref="TrackGenerator.EmitSection"/>'s <c>SharpHairpin</c> case).
         /// </summary>
         public float SharpHairpinReach;
 
         /// <summary>
-        /// How hard a <see cref="TrackSectionType.RampCorner"/> pulls its own line toward the
-        /// inside, as a fraction of its chord length. Reused directly as the sine-bulge amplitude
-        /// factor — there is only one line through this section, and this is how tight it is.
+        /// How hard a <see cref="TrackSectionType.RampCorner"/> bends, as a fraction of its chord
+        /// length, used directly as the sine-bulge amplitude factor. This is what decides whether
+        /// the ramp off its inside kerb is worth taking: the sharper the bend, the more the chord
+        /// across it saves over the road round.
         /// </summary>
         public float RampCornerThrow;
 
@@ -93,7 +95,7 @@ namespace RacingBotCup.Track
                 ShapePhase = random.Range(0f, Mathf.PI * 2f),
                 ShapeSecondaryPhase = random.Range(0f, Mathf.PI * 2f),
                 HairpinReach = random.Range(0.95f, 1.35f),
-                SharpHairpinReach = random.Range(1.0f, 1.6f),
+                SharpHairpinReach = random.Range(0.7f, 1.0f),
                 RampCornerThrow = random.Range(0.18f, 0.30f),
                 ChicaneThrow = random.Range(0.9f, 1.3f),
                 EssesThrow = random.Range(1.0f, 1.5f),

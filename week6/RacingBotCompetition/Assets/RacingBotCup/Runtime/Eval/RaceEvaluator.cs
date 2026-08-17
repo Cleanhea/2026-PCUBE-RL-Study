@@ -51,6 +51,11 @@ namespace RacingBotCup.Eval
         [Tooltip("학습된 .onnx 모델. 비워 두면 키보드로 조작됩니다")]
         [SerializeField] ModelAsset m_Model;
 
+        [Header("고스트 (같이 달리는 반투명 차, 꺼도 됨)")]
+        [Tooltip("기준으로 삼을 차 한 대. 기본 봇이거나, 내가 등록한 예전 모델이거나, 없음입니다.\n" +
+                 "점수에는 반영되지 않습니다")]
+        [SerializeField] GhostConfig m_Ghost = new GhostConfig();
+
         [Header("설정 (기본값 그대로 두세요)")]
         [SerializeField] GameObject m_CarPrefab;
         [SerializeField] TextAsset m_SeedSetAsset;
@@ -58,8 +63,6 @@ namespace RacingBotCup.Eval
         [SerializeField] TrackPropCatalogue m_Props = new TrackPropCatalogue();
         [SerializeField] SubmissionConfig m_SubmissionConfig;
 
-        [Tooltip("실시간으로 낮춰 주행을 눈으로 볼 수 있게 합니다. 점수는 동일합니다")]
-        [SerializeField] bool m_WatchMode;
 
         [SerializeField] bool m_RunOnStart;
 
@@ -95,7 +98,8 @@ namespace RacingBotCup.Eval
             }
         }
 
-        /// <summary>Runs the full evaluation. Ten circuits, all at once.</summary>
+        /// <summary>Runs the full evaluation, one circuit at a time, paced to real time so it can
+        /// always be watched start to finish.</summary>
         public void RunEvaluation()
         {
             if (IsRunning)
@@ -130,9 +134,9 @@ namespace RacingBotCup.Eval
                 Seeds = seeds,
                 Materials = m_Materials,
                 Props = m_Props,
+                Ghost = m_Ghost,
                 ParticipantId = m_ParticipantId,
                 Note = m_Note,
-                WatchMode = m_WatchMode,
             };
 
             yield return runner.Run(
