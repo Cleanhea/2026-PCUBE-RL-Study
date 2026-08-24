@@ -1,5 +1,8 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Unity.MLAgents;
+using Unity.MLAgents.Actuators;
+using Unity.MLAgents.Sensors;
 
 public enum Team
 {
@@ -9,7 +12,7 @@ public enum Team
 
 // 앞으로 적용할 것: bservations / rewards / policy
 // 현재 적용된 것: movement, kick physics
-public class AgentSoccer : MonoBehaviour
+public class AgentSoccer : Agent
 {
     public enum Position
     {
@@ -27,15 +30,19 @@ public class AgentSoccer : MonoBehaviour
     float m_LateralSpeed;
     float m_ForwardSpeed;
 
+    float m_ExistentialReward;
+
     [HideInInspector]
     public Rigidbody agentRb;
     SoccerSettings m_SoccerSettings;
+
+    SoccerEnvController m_SoccerEnvController;
 
     // Reset anchor + spawn rotation, read by SoccerEnvController.ResetScene().
     public Vector3 initialPos;
     public float rotSign;
 
-    void Awake()
+    public override void Initialize()
     {
         initialPos = transform.position;
         if (team == Team.Blue)
@@ -64,53 +71,88 @@ public class AgentSoccer : MonoBehaviour
         }
 
         m_SoccerSettings = FindFirstObjectByType<SoccerSettings>();
+        m_SoccerEnvController = FindFirstObjectByType<SoccerEnvController>();
+
         agentRb = GetComponent<Rigidbody>();
         agentRb.maxAngularVelocity = 500;
+
+        m_ExistentialReward = 1f / m_SoccerEnvController.MaxEnvironmentSteps;
+    }
+
+    public override void CollectObservations(VectorSensor sensor)
+    {
+        sensor.AddObservation(agentRb.linearVelocity);
+    }
+
+    public override void Heuristic(in ActionBuffers actionsOut)
+    {
+        var d = actionsOut.DiscreteActions;
+        var kb = Keyboard.current;
+        if (kb == null) return;
+
+        d[0] = kb.wKey.isPressed ? 1 : kb.sKey.isPressed ? 2 : 0;
+        d[1] = kb.eKey.isPressed ? 1 : kb.qKey.isPressed ? 2 : 0;
+        d[2] = kb.dKey.isPressed ? 1 : kb.aKey.isPressed ? 2 : 0;
+    }
+
+    public override void OnEpisodeBegin()
+    {
+        agentRb.linearVelocity = Vector3.zero;
+        agentRb.angularVelocity = Vector3.zero;
+    }
+
+    public override void OnActionReceived(ActionBuffers actions)
+    {
+        AddReward(position == Position.Goalie ? m_ExistentialReward : -m_ExistentialReward);
+        
+        if(position == Position.Goalie)
+        {
+            var strayed = Mathf.Abs(transform.position.x - initialPos.x);
+            AddReward(-m_ExistentialReward * strayed);
+        }
+
+        else if(position == Position.Striker && m_SoccerEnvController != null)
+        {
+            var attackDir = team == Team.Blue ? 1f : -1f;
+            var ahead = attackDir * (transform.position.x - m_SoccerEnvController.ball.transform.position.x);
+            if (ahead > 0.5f)
+            {
+                AddReward(-m_ExistentialReward * ahead * 0.01f);
+            }
+        }
+        MoveAgent(actions.DiscreteActions);
     }
 
     void FixedUpdate()
     {
-        MoveByInput();
+
     }
 
     // Keyboard control (every keyboard player shares these keys):
     // W/S = forward/back, Q/E = strafe left/right, A/D = rotate.
-    void MoveByInput()
+    void MoveAgent(ActionSegment<int> act)
     {
-        var kb = Keyboard.current;
-        if (kb == null) return;
 
         var dirToGo = Vector3.zero;
         var rotateDir = Vector3.zero;
         m_KickPower = 0f;
 
-        if (kb.wKey.isPressed)
+        switch (act[0])
         {
-            dirToGo = transform.forward * m_ForwardSpeed;
-            m_KickPower = 1f;
-        }
-        else if (kb.sKey.isPressed)
-        {
-            dirToGo = transform.forward * -m_ForwardSpeed;
+            case 1: dirToGo = transform.forward * m_ForwardSpeed; m_KickPower = 1; break;
+            case 2: dirToGo = transform.forward * -m_ForwardSpeed; break;
         }
 
-        // Strafe overrides forward, matching the original discrete-action move.
-        if (kb.eKey.isPressed)
+        switch (act[1])
         {
-            dirToGo = transform.right * m_LateralSpeed;
-        }
-        else if (kb.qKey.isPressed)
-        {
-            dirToGo = transform.right * -m_LateralSpeed;
+            case 1: dirToGo = transform.right * m_LateralSpeed; break;
+            case 2: dirToGo = transform.right * -m_LateralSpeed; break;
         }
 
-        if (kb.aKey.isPressed)
+        switch (act[2])
         {
-            rotateDir = transform.up * -1f;
-        }
-        else if (kb.dKey.isPressed)
-        {
-            rotateDir = transform.up * 1f;
+            case 1: rotateDir = transform.up * 1f; break;
+            case 2: rotateDir = transform.up * -1f; break;
         }
 
         transform.Rotate(rotateDir, Time.deltaTime * 100f);
@@ -132,6 +174,20 @@ public class AgentSoccer : MonoBehaviour
             var dir = c.contacts[0].point - transform.position;
             dir = dir.normalized;
             c.gameObject.GetComponent<Rigidbody>().AddForce(dir * force);
+
+            if(position == Position.Striker)
+            {
+                var relativePostion = (transform.position - c.gameObject.transform.position).normalized;
+                var sign = team == Team.Blue ? -1f : 1f;
+                float reward = sign * relativePostion.x * 0.01f;
+                AddReward(reward + 0.005f);
+            }
+            else if(position == Position.Goalie)
+            {
+                var awayFromGoal = team == Team.Blue ? 1f : -1f;
+                var save = 0.1f + 0.2f * Mathf.Clamp01(awayFromGoal*dir.x);
+                AddReward(save);
+            }
         }
     }
 }
