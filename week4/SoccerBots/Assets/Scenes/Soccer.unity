@@ -362,6 +362,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 242726380}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &11876116
@@ -2602,6 +2603,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 405413145}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &78528440
@@ -3139,6 +3141,7 @@ MonoBehaviour:
   team: 1
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1837445111}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &93805422
@@ -3216,7 +3219,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Keeper
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -3422,6 +3425,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 242726380}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &109138825
@@ -4477,6 +4481,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 605605257}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &161375615
@@ -4554,7 +4559,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -4844,6 +4849,7 @@ MonoBehaviour:
   team: 0
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1793761935}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &165054519
@@ -5657,6 +5663,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1837445111}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &191503506
@@ -5734,7 +5741,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -6424,6 +6431,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1837445111}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &233656894
@@ -7297,6 +7305,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1837445111}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &299541753
@@ -7484,6 +7493,7 @@ MonoBehaviour:
   team: 0
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 605605257}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &311866208
@@ -9205,6 +9215,7 @@ MonoBehaviour:
   team: 0
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 8122248193878726091}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!135 &409728565
@@ -9646,6 +9657,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1793761935}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &425065978
@@ -9723,7 +9735,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -10251,6 +10263,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 344247889}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &438869761
@@ -11280,6 +11293,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 8122248193878726091}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!135 &473166307
@@ -11451,6 +11465,7 @@ MonoBehaviour:
   team: 1
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 578331500}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &475021304
@@ -11528,7 +11543,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Keeper
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -11639,6 +11654,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 344247889}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &477212587
@@ -12280,6 +12296,7 @@ MonoBehaviour:
   team: 1
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 605605257}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &499691717
@@ -12357,7 +12374,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Keeper
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -13009,6 +13026,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1793761935}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &526589552
@@ -13086,7 +13104,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -16866,6 +16884,7 @@ MonoBehaviour:
   team: 0
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 405413145}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &651870575
@@ -18643,6 +18662,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 605605257}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &735446255
@@ -19416,6 +19436,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 605605257}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &759063018
@@ -19493,7 +19514,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -20201,6 +20222,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 344247889}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &803829593
@@ -20278,7 +20300,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -23590,6 +23612,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 578331500}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &982100146
@@ -23867,6 +23890,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 578331500}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &990440070
@@ -25241,6 +25265,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 242726380}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1022885030
@@ -25318,7 +25343,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -25947,6 +25972,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 605605257}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1058955784
@@ -26406,6 +26432,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 405413145}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1083022463
@@ -26921,6 +26948,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 405413145}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1112050869
@@ -26998,7 +27026,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -29971,6 +29999,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 8122248193878726091}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!135 &1260271836
@@ -30062,7 +30091,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -30761,6 +30790,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 578331500}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1292106845
@@ -30838,7 +30868,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -31623,6 +31653,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 405413145}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1311427935
@@ -31700,7 +31731,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -33996,6 +34027,7 @@ MonoBehaviour:
   team: 1
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 405413145}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1392373324
@@ -34073,7 +34105,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Keeper
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -36819,6 +36851,7 @@ MonoBehaviour:
   team: 0
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 344247889}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1522006080
@@ -37102,6 +37135,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1793761935}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1523882293
@@ -37593,6 +37627,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 578331500}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1536909514
@@ -37670,7 +37705,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -42394,6 +42429,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1793761935}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1728922614
@@ -43084,6 +43120,7 @@ MonoBehaviour:
   team: 1
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 344247889}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1749617542
@@ -43161,7 +43198,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Keeper
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -44475,6 +44512,7 @@ MonoBehaviour:
   team: 0
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 578331500}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1804033718
@@ -45053,6 +45091,7 @@ MonoBehaviour:
   team: 1
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1793761935}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1829118774
@@ -45130,7 +45169,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Keeper
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -45596,6 +45635,7 @@ MonoBehaviour:
   team: 0
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1837445111}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1840170985
@@ -45784,6 +45824,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 344247889}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1844402713
@@ -45861,7 +45902,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -46618,6 +46659,7 @@ MonoBehaviour:
   team: 0
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 242726380}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1876465430
@@ -47081,6 +47123,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 1837445111}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &1884445431
@@ -47158,7 +47201,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -51037,6 +51080,7 @@ MonoBehaviour:
   team: 1
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 242726380}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &2045160708
@@ -51114,7 +51158,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Keeper
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -51654,6 +51698,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 242726380}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &2073740348
@@ -51731,7 +51776,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -52964,6 +53009,7 @@ MonoBehaviour:
   team: 1
   position: 1
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 8122248193878726091}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!135 &2134386842
@@ -53055,7 +53101,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Keeper
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0
@@ -54824,6 +54870,7 @@ MonoBehaviour:
   team: 1
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 8122248193878726091}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!114 &114850430771075675
@@ -54845,6 +54892,7 @@ MonoBehaviour:
   team: 0
   position: 0
   agentRb: {fileID: 0}
+  m_SoccerEnvController: {fileID: 8122248193878726091}
   initialPos: {x: 0, y: 0, z: 0}
   rotSign: 0
 --- !u!135 &135208950758527711
@@ -55010,7 +55058,7 @@ MonoBehaviour:
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: Striker
-  TeamId: 0
+  TeamId: 1
   m_UseChildSensors: 1
   m_UseChildActuators: 1
   m_DeterministicInference: 0

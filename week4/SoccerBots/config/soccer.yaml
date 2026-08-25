@@ -71,14 +71,14 @@ environment_parameters:
           behavior: Striker
           signal_smoothing: true
           min_lesson_length: 100
-          threshold: 0.4
+          threshold: 0.0
         value: 0.0
       - name: VsGoalie
         completion_criteria:
           measure: reward
           behavior: Striker
           min_lesson_length: 100
-          threshold: 0.6
+          threshold: 0.2
         value: 1.0
       - name: SelfPlay
         value: 2.0

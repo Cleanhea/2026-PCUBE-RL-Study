@@ -35,8 +35,10 @@ public class SoccerEnvController : MonoBehaviour
     public int redScore;
 
     int m_ResetTimer;
-    SimpleMultiAgentGroup m_BlueAgentGroup;
-    SimpleMultiAgentGroup m_RedAgentGroup;
+    SimpleMultiAgentGroup m_BlueStrikerGroup;
+    SimpleMultiAgentGroup m_BlueKeeperGroup;
+    SimpleMultiAgentGroup m_RedStrikerGroup;
+    SimpleMultiAgentGroup m_RedKeeperGroup;
 
     // VsGoalie lesson (2 attacking strikers vs the other team's lone goalie): the attacker/defender
     // roles are fixed for the round, so we can shape defense specifically. Set in ResetScene.
@@ -48,8 +50,10 @@ public class SoccerEnvController : MonoBehaviour
         ballRb = ball.GetComponent<Rigidbody>();
         m_BallStartingPos = ball.transform.position;
 
-        m_BlueAgentGroup = new SimpleMultiAgentGroup();
-        m_RedAgentGroup = new SimpleMultiAgentGroup();
+        m_BlueStrikerGroup = new SimpleMultiAgentGroup();
+        m_BlueKeeperGroup = new SimpleMultiAgentGroup();
+        m_RedStrikerGroup = new SimpleMultiAgentGroup();
+        m_RedKeeperGroup = new SimpleMultiAgentGroup();
 
         foreach (var item in AgentsList)
         {
@@ -66,8 +70,7 @@ public class SoccerEnvController : MonoBehaviour
         m_ResetTimer += 1;
         if (m_ResetTimer >= MaxEnvironmentSteps && MaxEnvironmentSteps > 0)
         {
-            m_BlueAgentGroup.GroupEpisodeInterrupted();
-            m_RedAgentGroup.GroupEpisodeInterrupted();
+            InterruptAllGroups();
             ResetScene();
         }
     }
@@ -87,17 +90,16 @@ public class SoccerEnvController : MonoBehaviour
 
     public void GoalTouched(Team scoredTeam)
     {
-        var scoredGroup = scoredTeam == Team.Blue ? m_BlueAgentGroup : m_RedAgentGroup;
-        var concededGroup = scoredTeam == Team.Blue ? m_RedAgentGroup : m_BlueAgentGroup;
+        var concededTeam = scoredTeam == Team.Blue ? Team.Red : Team.Blue;
 
         if (m_VsGoalieLesson && scoredTeam == m_DefenderTeam)
         {
-            concededGroup.AddGroupReward(-2f);
+            AddTeamGroupReward(concededTeam, -2f);
         }
         else
         {
-            scoredGroup.AddGroupReward(1f);
-            concededGroup.AddGroupReward(-1f);
+            AddTeamGroupReward(scoredTeam, 1f);
+            AddTeamGroupReward(concededTeam, -1f);
         }
 
         // Mirror the goal onto each active striker's INDIVIDUAL reward.
@@ -112,8 +114,7 @@ public class SoccerEnvController : MonoBehaviour
         if (scoredTeam == Team.Blue) blueScore++; else redScore++;
         Debug.Log($"Goal! Blue {blueScore} - {redScore} Red");
 
-        scoredGroup.EndGroupEpisode();
-        concededGroup.EndGroupEpisode();
+        EndAllGroups();
         ResetScene();
     }
 
@@ -136,7 +137,7 @@ public class SoccerEnvController : MonoBehaviour
             var active = ActiveInLesson(agent, lesson, randTeam);
             agent.gameObject.SetActive(active); // benched agents leave the field: no body, no decisions.
 
-            var group = agent.team == Team.Blue ? m_BlueAgentGroup : m_RedAgentGroup;
+            var group = GetGroup(agent);
             if (!active)
             {
                 group.UnregisterAgent(agent);
@@ -176,6 +177,50 @@ public class SoccerEnvController : MonoBehaviour
 
         //Reset Ball
         ResetBall();
+    }
+
+    SimpleMultiAgentGroup GetGroup(AgentSoccer agent)
+    {
+        if (agent.team == Team.Blue)
+        {
+            return agent.position == AgentSoccer.Position.Goalie
+                ? m_BlueKeeperGroup
+                : m_BlueStrikerGroup;
+        }
+
+        return agent.position == AgentSoccer.Position.Goalie
+            ? m_RedKeeperGroup
+            : m_RedStrikerGroup;
+    }
+
+    void AddTeamGroupReward(Team team, float reward)
+    {
+        if (team == Team.Blue)
+        {
+            m_BlueStrikerGroup.AddGroupReward(reward);
+            m_BlueKeeperGroup.AddGroupReward(reward);
+        }
+        else
+        {
+            m_RedStrikerGroup.AddGroupReward(reward);
+            m_RedKeeperGroup.AddGroupReward(reward);
+        }
+    }
+
+    void EndAllGroups()
+    {
+        m_BlueStrikerGroup.EndGroupEpisode();
+        m_BlueKeeperGroup.EndGroupEpisode();
+        m_RedStrikerGroup.EndGroupEpisode();
+        m_RedKeeperGroup.EndGroupEpisode();
+    }
+
+    void InterruptAllGroups()
+    {
+        m_BlueStrikerGroup.GroupEpisodeInterrupted();
+        m_BlueKeeperGroup.GroupEpisodeInterrupted();
+        m_RedStrikerGroup.GroupEpisodeInterrupted();
+        m_RedKeeperGroup.GroupEpisodeInterrupted();
     }
 
     // Who is on the field for a given curriculum lesson.

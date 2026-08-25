@@ -27,6 +27,8 @@ public class AgentSoccer : Agent
 
     float m_KickPower;
     const float k_Power = 2000f;
+    const float k_BallTouchReward = 0.02f;
+    const float k_KeeperClearReward = 0.04f;
     float m_LateralSpeed;
     float m_ForwardSpeed;
 
@@ -36,9 +38,9 @@ public class AgentSoccer : Agent
     public Rigidbody agentRb;
     SoccerSettings m_SoccerSettings;
 
+    [SerializeField]
     SoccerEnvController m_SoccerEnvController;
 
-    // Reset anchor + spawn rotation, read by SoccerEnvController.ResetScene().
     public Vector3 initialPos;
     public float rotSign;
 
@@ -71,12 +73,10 @@ public class AgentSoccer : Agent
         }
 
         m_SoccerSettings = FindFirstObjectByType<SoccerSettings>();
-        m_SoccerEnvController = FindFirstObjectByType<SoccerEnvController>();
-
         agentRb = GetComponent<Rigidbody>();
         agentRb.maxAngularVelocity = 500;
 
-        m_ExistentialReward = 1f / m_SoccerEnvController.MaxEnvironmentSteps;
+        m_ExistentialReward = 0.1f / m_SoccerEnvController.MaxEnvironmentSteps;
     }
 
     public override void CollectObservations(VectorSensor sensor)
@@ -128,8 +128,6 @@ public class AgentSoccer : Agent
 
     }
 
-    // Keyboard control (every keyboard player shares these keys):
-    // W/S = forward/back, Q/E = strafe left/right, A/D = rotate.
     void MoveAgent(ActionSegment<int> act)
     {
 
@@ -139,14 +137,14 @@ public class AgentSoccer : Agent
 
         switch (act[0])
         {
-            case 1: dirToGo = transform.forward * m_ForwardSpeed; m_KickPower = 1; break;
-            case 2: dirToGo = transform.forward * -m_ForwardSpeed; break;
+            case 1: dirToGo += transform.forward * m_ForwardSpeed; m_KickPower = 1; break;
+            case 2: dirToGo += transform.forward * -m_ForwardSpeed; break;
         }
 
         switch (act[1])
         {
-            case 1: dirToGo = transform.right * m_LateralSpeed; break;
-            case 2: dirToGo = transform.right * -m_LateralSpeed; break;
+            case 1: dirToGo += transform.right * m_LateralSpeed; break;
+            case 2: dirToGo += transform.right * -m_LateralSpeed; break;
         }
 
         switch (act[2])
@@ -177,16 +175,29 @@ public class AgentSoccer : Agent
 
             if(position == Position.Striker)
             {
+                // Strikers are rewarded for seeking and touching the ball.
+                AddReward(k_BallTouchReward);
+
                 var relativePostion = (transform.position - c.gameObject.transform.position).normalized;
                 var sign = team == Team.Blue ? -1f : 1f;
-                float reward = sign * relativePostion.x * 0.01f;
-                AddReward(reward + 0.005f);
+                float positional = sign * relativePostion.x * 0.01f;
+                float directionalBonus = positional >= 0f ? 0.005f : 0f;
+                AddReward(positional + directionalBonus);
             }
             else if(position == Position.Goalie)
             {
                 var awayFromGoal = team == Team.Blue ? 1f : -1f;
-                var save = 0.1f + 0.2f * Mathf.Clamp01(awayFromGoal*dir.x);
-                AddReward(save);
+                var clearanceQuality = Mathf.Clamp(awayFromGoal * dir.x, -1f, 1f);
+                var arenaCenterX = m_SoccerEnvController.transform.position.x;
+                var ballX = c.gameObject.transform.position.x;
+                var ballInOwnHalf = team == Team.Blue
+                    ? ballX <= arenaCenterX
+                    : ballX >= arenaCenterX;
+
+                if (ballInOwnHalf || clearanceQuality < 0f)
+                {
+                    AddReward(k_KeeperClearReward * clearanceQuality);
+                }
             }
         }
     }
