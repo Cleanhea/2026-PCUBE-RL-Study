@@ -5,6 +5,16 @@ using UnityEngine;
 // spawn/reset the players and ball, handle a goal (score + group reward + reset)
 public class SoccerEnvController : MonoBehaviour
 {
+    // Each active agent receives both shares, so the terminal goal reward still
+    // totals +1/-1 per agent while remaining visible to the individual return.
+    const float k_GroupGoalRewardShare = 0.5f;
+    const float k_IndividualGoalRewardShare = 0.5f;
+
+    // Playable bounds, in local units from the field centre. Also the scale AgentSoccer
+    // normalises the keeper's line observations against.
+    public const float PitchHalfX = 18f; // goal line begins ~20.2
+    public const float PitchHalfZ = 7f;  // side walls at ~9.8
+
     [System.Serializable]
     public class PlayerInfo
     {
@@ -17,16 +27,15 @@ public class SoccerEnvController : MonoBehaviour
         public Rigidbody Rb;
     }
 
-    public int MaxEnvironmentSteps = 25000;
+    public int MaxEnvironmentSteps = 2000;
 
     public bool strongRandomization = true;
-
-    public float ballStallPenaltyScale = 0.00005f;
 
     public GameObject ball;
     [HideInInspector]
     public Rigidbody ballRb;
     Vector3 m_BallStartingPos;
+    float previousBallX;
 
     // List of players on this field.
     public List<PlayerInfo> AgentsList = new List<PlayerInfo>();
@@ -34,15 +43,20 @@ public class SoccerEnvController : MonoBehaviour
     public int blueScore;
     public int redScore;
 
+    public float progressRewardScale = 0.01f;
+    public float keeperDefenseRewardScale = 0.01f;
+    public float shotReward = 0.05f;
+
+    float lesson;
     int m_ResetTimer;
-    SimpleMultiAgentGroup m_BlueStrikerGroup;
-    SimpleMultiAgentGroup m_BlueKeeperGroup;
-    SimpleMultiAgentGroup m_RedStrikerGroup;
-    SimpleMultiAgentGroup m_RedKeeperGroup;
+    SimpleMultiAgentGroup m_BlueStrikers;
+    SimpleMultiAgentGroup m_BlueKeeper;
+
+    SimpleMultiAgentGroup m_RedStrikers;
+    SimpleMultiAgentGroup m_RedKeeper;
 
     // VsGoalie lesson (2 attacking strikers vs the other team's lone goalie): the attacker/defender
     // roles are fixed for the round, so we can shape defense specifically. Set in ResetScene.
-    bool m_VsGoalieLesson;
     Team m_DefenderTeam;      // the team whose goalie is defending
 
     void Start()
@@ -50,10 +64,10 @@ public class SoccerEnvController : MonoBehaviour
         ballRb = ball.GetComponent<Rigidbody>();
         m_BallStartingPos = ball.transform.position;
 
-        m_BlueStrikerGroup = new SimpleMultiAgentGroup();
-        m_BlueKeeperGroup = new SimpleMultiAgentGroup();
-        m_RedStrikerGroup = new SimpleMultiAgentGroup();
-        m_RedKeeperGroup = new SimpleMultiAgentGroup();
+        m_BlueStrikers = new SimpleMultiAgentGroup();
+        m_BlueKeeper = new SimpleMultiAgentGroup();
+        m_RedStrikers = new SimpleMultiAgentGroup();
+        m_RedKeeper = new SimpleMultiAgentGroup();
 
         foreach (var item in AgentsList)
         {
@@ -67,6 +81,27 @@ public class SoccerEnvController : MonoBehaviour
 
     void FixedUpdate()
     {
+        var ballX = ball.transform.position.x;
+        var deltaX = ballX - previousBallX;
+
+        // Only strikers receive whole-pitch attacking progress. Giving this reward to the
+        // keeper paid it for escorting the ball all the way into the opponent's goal.
+        AddStrikerGroupReward(Team.Blue, deltaX * progressRewardScale);
+        AddStrikerGroupReward(Team.Red, -deltaX * progressRewardScale);
+
+        // Keeper shaping is defensive and saturates at midfield. It rewards recovering a
+        // threatening ball from the own goal line toward halfway, but gives nothing for
+        // carrying an already-safe ball farther into the opponent's half.
+        AddKeeperGroupReward(
+            Team.Blue,
+            (KeeperBallSafety(Team.Blue, ballX) - KeeperBallSafety(Team.Blue, previousBallX))
+            * keeperDefenseRewardScale);
+        AddKeeperGroupReward(
+            Team.Red,
+            (KeeperBallSafety(Team.Red, ballX) - KeeperBallSafety(Team.Red, previousBallX))
+            * keeperDefenseRewardScale);
+
+        previousBallX = ballX;
         m_ResetTimer += 1;
         if (m_ResetTimer >= MaxEnvironmentSteps && MaxEnvironmentSteps > 0)
         {
@@ -86,33 +121,55 @@ public class SoccerEnvController : MonoBehaviour
         ball.transform.position = m_BallStartingPos + new Vector3(randomPosX, 0f, randomPosZ);
         ballRb.linearVelocity = Vector3.zero;
         ballRb.angularVelocity = Vector3.zero;
+
+        previousBallX = ball.transform.position.x;
     }
 
     public void GoalTouched(Team scoredTeam)
     {
         var concededTeam = scoredTeam == Team.Blue ? Team.Red : Team.Blue;
+        bool ownGoal = scoredTeam == m_DefenderTeam;
 
-        if (m_VsGoalieLesson && scoredTeam == m_DefenderTeam)
+        if (lesson < 2f)
         {
-            AddTeamGroupReward(concededTeam, -2f);
+            if (ownGoal)
+            {
+                // Lesson 0: -1.2
+                // Lesson 1: -2.0
+                float penalty = lesson < 1f ? -1.2f : -2.0f;
+
+                // 50% group + 50% individual
+                AddStrikerTerminalReward(concededTeam, penalty);
+
+                Debug.Log("Own Goal!");
+            }
+            else
+            {
+                // Attacking strikers scored.
+                // +1.0 = +0.5 group + +0.5 individual
+                AddStrikerTerminalReward(scoredTeam, 1.0f);
+
+                if (lesson >= 1f)
+                {
+                    // Defending keeper conceded.
+                    // -1.0 = -0.5 group + -0.5 individual
+                    AddKeeperTerminalReward(concededTeam, -1.0f);
+                }
+
+                Debug.Log("Goal!");
+            }
         }
         else
         {
-            AddTeamGroupReward(scoredTeam, 1f);
-            AddTeamGroupReward(concededTeam, -1f);
+            // Lesson 2: existing 3v3 behavior.
+            AddTeamGoalReward(scoredTeam, 1.0f);
+            AddTeamGoalReward(concededTeam, -1.0f);
         }
 
-        // Mirror the goal onto each active striker's INDIVIDUAL reward.
-        foreach (var item in AgentsList)
-        {
-            var a = item.Agent;
-            if (!a.gameObject.activeSelf || a.position != AgentSoccer.Position.Striker)
-                continue;
-            a.AddReward(a.team == scoredTeam ? 1f : -1f);
-        }
-
-        if (scoredTeam == Team.Blue) blueScore++; else redScore++;
-        Debug.Log($"Goal! Blue {blueScore} - {redScore} Red");
+        if (scoredTeam == Team.Blue)
+            blueScore++;
+        else
+            redScore++;
 
         EndAllGroups();
         ResetScene();
@@ -121,61 +178,96 @@ public class SoccerEnvController : MonoBehaviour
     public void ResetScene()
     {
         m_ResetTimer = 0;
+        lesson = Academy.Instance.EnvironmentParameters.GetWithDefault("lesson", 2f);
 
-        // Curriculum lesson (from Python environment_parameters): 
-        // 0 = 2 strikers vs empty goal,
-        // 1 = 2 strikers vs a lone goalie,
-        // 2 = full 3v3 self-play.
-        var lesson = Academy.Instance.EnvironmentParameters.GetWithDefault("lesson", 2f);
         Team randTeam = Random.value < 0.5f ? Team.Blue : Team.Red;
+
         // randTeam's strikers attack
-        m_VsGoalieLesson = lesson >= 1f && lesson < 2f;
         m_DefenderTeam = randTeam == Team.Blue ? Team.Red : Team.Blue;
+
         foreach (var item in AgentsList)
         {
             var agent = item.Agent;
             var active = ActiveInLesson(agent, lesson, randTeam);
-            agent.gameObject.SetActive(active); // benched agents leave the field: no body, no decisions.
+
+            agent.gameObject.SetActive(active);
 
             var group = GetGroup(agent);
+
             if (!active)
             {
                 group.UnregisterAgent(agent);
                 continue;
             }
-            group.RegisterAgent(agent);
 
-            const float pitchHalfX = 19f; // goal line begins ~20.2
-            const float pitchHalfZ = 8f;  // side walls at ~9.8
+            group.RegisterAgent(agent);
+            agent.ResetEpisodeBudgets();
 
             Vector3 newStartPos;
             Quaternion newRot;
-            if (strongRandomization && agent.position != AgentSoccer.Position.Goalie)
+
+            if (strongRandomization &&
+                agent.position != AgentSoccer.Position.Goalie)
             {
-                // Scatter non-goalie players anywhere on the pitch, facing a random direction, so the
-                // striker generalizes past the near-home kickoff layout. Goalies keep their line.
-                var lx = Random.Range(-pitchHalfX, pitchHalfX);
-                var lz = Random.Range(-pitchHalfZ, pitchHalfZ);
-                newStartPos = new Vector3(transform.position.x + lx, agent.initialPos.y, transform.position.z + lz);
-                newRot = Quaternion.Euler(0, Random.Range(0f, 360f), 0);
+                var lx = Random.Range(-PitchHalfX, PitchHalfX);
+                var lz = Random.Range(-PitchHalfZ, PitchHalfZ);
+
+                newStartPos = new Vector3(
+                    transform.position.x + lx,
+                    item.StartingPos.y,
+                    transform.position.z + lz
+                );
+
+                newRot = Quaternion.Euler(
+                    0f,
+                    Random.Range(0f, 360f),
+                    0f
+                );
             }
             else
             {
-                // Default: small depth (x) jitter around home, clamped to the pitch, authored facing.
-                var newX = agent.initialPos.x + Random.Range(-5f, 5f);
-                var localX = Mathf.Clamp(newX - transform.position.x, -pitchHalfX, pitchHalfX);
-                newStartPos = new Vector3(transform.position.x + localX, agent.initialPos.y, agent.initialPos.z);
-                newRot = Quaternion.Euler(0, agent.rotSign * Random.Range(80f, 100f), 0);
+                var newX =
+                    item.StartingPos.x +
+                    Random.Range(-5f, 5f);
+
+                var localX = Mathf.Clamp(
+                    newX - transform.position.x,
+                    -PitchHalfX,
+                    PitchHalfX
+                );
+
+                newStartPos = new Vector3(
+                    transform.position.x + localX,
+                    item.StartingPos.y,
+                    item.StartingPos.z
+                );
+
+                newRot = Quaternion.Euler(
+                    0f,
+                    agent.rotSign * Random.Range(80f, 100f),
+                    0f
+                );
             }
-            agent.transform.SetPositionAndRotation(newStartPos, newRot);
+
+            agent.transform.SetPositionAndRotation(
+                newStartPos,
+                newRot
+            );
 
             item.Rb.linearVelocity = Vector3.zero;
             item.Rb.angularVelocity = Vector3.zero;
         }
-        Academy.Instance.StatsRecorder.Add("Blue Score", blueScore);
-        Academy.Instance.StatsRecorder.Add("Red Score", redScore);
 
-        //Reset Ball
+        Academy.Instance.StatsRecorder.Add(
+            "Blue Score",
+            blueScore
+        );
+
+        Academy.Instance.StatsRecorder.Add(
+            "Red Score",
+            redScore
+        );
+
         ResetBall();
     }
 
@@ -184,43 +276,136 @@ public class SoccerEnvController : MonoBehaviour
         if (agent.team == Team.Blue)
         {
             return agent.position == AgentSoccer.Position.Goalie
-                ? m_BlueKeeperGroup
-                : m_BlueStrikerGroup;
+                ? m_BlueKeeper
+                : m_BlueStrikers;
         }
 
         return agent.position == AgentSoccer.Position.Goalie
-            ? m_RedKeeperGroup
-            : m_RedStrikerGroup;
+            ? m_RedKeeper
+            : m_RedStrikers;
     }
 
     void AddTeamGroupReward(Team team, float reward)
     {
         if (team == Team.Blue)
         {
-            m_BlueStrikerGroup.AddGroupReward(reward);
-            m_BlueKeeperGroup.AddGroupReward(reward);
+            m_BlueStrikers.AddGroupReward(reward);
+            m_BlueKeeper.AddGroupReward(reward);
         }
         else
         {
-            m_RedStrikerGroup.AddGroupReward(reward);
-            m_RedKeeperGroup.AddGroupReward(reward);
+            m_RedStrikers.AddGroupReward(reward);
+            m_RedKeeper.AddGroupReward(reward);
+        }
+    }
+
+    void AddStrikerGroupReward(Team team, float reward)
+    {
+        if (team == Team.Blue)
+            m_BlueStrikers.AddGroupReward(reward);
+        else
+            m_RedStrikers.AddGroupReward(reward);
+    }
+
+    void AddKeeperGroupReward(Team team, float reward)
+    {
+        if (team == Team.Blue)
+            m_BlueKeeper.AddGroupReward(reward);
+        else
+            m_RedKeeper.AddGroupReward(reward);
+    }
+    void AddStrikerTerminalReward(Team team, float totalReward)
+    {
+        // POCA group reward
+        AddStrikerGroupReward(
+            team,
+            totalReward * k_GroupGoalRewardShare
+        );
+
+        // Individual reward:
+        // TensorBoard Environment/Cumulative Reward와
+        // curriculum measure: reward에 보이도록 함.
+        float individualReward =
+            totalReward * k_IndividualGoalRewardShare;
+
+        foreach (var item in AgentsList)
+        {
+            var agent = item.Agent;
+
+            if (agent.gameObject.activeSelf &&
+                agent.team == team &&
+                agent.position == AgentSoccer.Position.Striker)
+            {
+                agent.AddReward(individualReward);
+            }
+        }
+    }
+
+    void AddKeeperTerminalReward(Team team, float totalReward)
+    {
+        // POCA group reward
+        AddKeeperGroupReward(
+            team,
+            totalReward * k_GroupGoalRewardShare
+        );
+
+        // Individual keeper reward
+        float individualReward =
+            totalReward * k_IndividualGoalRewardShare;
+
+        foreach (var item in AgentsList)
+        {
+            var agent = item.Agent;
+
+            if (agent.gameObject.activeSelf &&
+                agent.team == team &&
+                agent.position == AgentSoccer.Position.Goalie)
+            {
+                agent.AddReward(individualReward);
+            }
+        }
+    }
+
+    float KeeperBallSafety(Team team, float ballX)
+    {
+        var centerX = transform.position.x;
+        var ownLineX = centerX + (team == Team.Blue ? -PitchHalfX : PitchHalfX);
+        var distanceFromOwnLine = team == Team.Blue
+            ? ballX - ownLineX
+            : ownLineX - ballX;
+        return Mathf.Clamp(distanceFromOwnLine, 0f, PitchHalfX);
+    }
+
+    void AddTeamGoalReward(Team team, float totalReward)
+    {
+        AddTeamGroupReward(team, totalReward * k_GroupGoalRewardShare);
+
+        var individualReward = totalReward * k_IndividualGoalRewardShare;
+        foreach (var item in AgentsList)
+        {
+            var agent = item.Agent;
+            if (agent.gameObject.activeSelf && agent.team == team)
+            {
+                agent.AddReward(individualReward);
+            }
         }
     }
 
     void EndAllGroups()
     {
-        m_BlueStrikerGroup.EndGroupEpisode();
-        m_BlueKeeperGroup.EndGroupEpisode();
-        m_RedStrikerGroup.EndGroupEpisode();
-        m_RedKeeperGroup.EndGroupEpisode();
+        m_BlueStrikers.EndGroupEpisode();
+        m_BlueKeeper.EndGroupEpisode();
+
+        m_RedStrikers.EndGroupEpisode();
+        m_RedKeeper.EndGroupEpisode();
     }
 
     void InterruptAllGroups()
     {
-        m_BlueStrikerGroup.GroupEpisodeInterrupted();
-        m_BlueKeeperGroup.GroupEpisodeInterrupted();
-        m_RedStrikerGroup.GroupEpisodeInterrupted();
-        m_RedKeeperGroup.GroupEpisodeInterrupted();
+        m_BlueStrikers.GroupEpisodeInterrupted();
+        m_BlueKeeper.GroupEpisodeInterrupted();
+        m_RedStrikers.GroupEpisodeInterrupted();
+        m_RedKeeper.GroupEpisodeInterrupted();
     }
 
     // Who is on the field for a given curriculum lesson.
