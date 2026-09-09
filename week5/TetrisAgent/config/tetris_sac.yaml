@@ -1,0 +1,28 @@
+behaviors:
+  Tetris:
+    trainer_type: sac
+    max_steps: 10000000
+    time_horizon: 64
+    summary_freq: 20000
+    keep_checkpoints: 5
+
+    hyperparameters:
+      learning_rate: 3.0e-4
+      learning_rate_schedule: constant
+      batch_size: 256
+      buffer_size: 500000
+      buffer_init_steps: 2000
+      init_entcoef: 0.4
+      tau: 0.005
+      steps_per_update: 10.0
+      save_replay_buffer: true
+
+    network_settings:
+      hidden_units: 256
+      num_layers: 2
+      normalize: false
+
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
