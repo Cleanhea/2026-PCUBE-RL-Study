@@ -33,6 +33,14 @@ namespace RacingBotCup.Track
         };
 
         /// <summary>Chance each hazard variant appears at all in a given circuit, independently.</summary>
+        // Raised from 0.25 to 1.0 so every circuit carries all three variants. The three rolls
+        // are independent, so at 0.25 a share 0.75^3 of seeds produced no obstacle props at all
+        // and 0.75^2 produced nothing on the racing line: over half of curriculum stage 3 was
+        // training against empty circuits. NextFloat() is strictly below 1, so 1.0 always passes.
+        //
+        // RollHazards still consumes the same six values whatever this is set to, which keeps the
+        // rest of a seed's stream aligned. The boolean outcomes do change, so a given seed no
+        // longer produces the circuit it produced before this edit.
         const float k_HazardChance = 0.25f;
 
         /// <summary>

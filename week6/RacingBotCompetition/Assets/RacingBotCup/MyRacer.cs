@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using RacingBotCup.Agent;
 using RacingBotCup.Racing;
 using RacingBotCup.Track;
+using RacingBotCup.Vehicle;
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Policies;
@@ -47,18 +48,32 @@ public class MyRacer : RacerAgent
     [SerializeField, Min(0f)] float m_SpeedRewardPerMetre = 0.01f;
     [SerializeField, Min(0.1f)] float m_SpeedReference = 25f;
     [SerializeField, Min(0f)] float m_MinForwardSpeed = 0.5f;
-    [Tooltip("Minimum cruising speed per stage, in km/h. Driving below it costs the penalty rate below.")]
-    [SerializeField, Min(0f)] float m_Stage1MinSpeedKph = 35f;
+    [Tooltip("Speed floor observed by the policy AND priced by the slow-speed penalty, in km/h.")]
+    [SerializeField, Min(0f)] float m_Stage1MinSpeedKph = 18f;
     [SerializeField, Min(0f)] float m_Stage2MinSpeedKph = 60f;
     [SerializeField, Min(0f)] float m_Stage3MinSpeedKph = 80f;
     [Tooltip("Scaled by the shortfall: full rate when stopped, nothing at the stage floor.")]
     [SerializeField, Min(0f)] float m_SlowSpeedPenaltyPerSecond = 0.2f;
     [Tooltip("Seconds of the episode start that are exempt, so the standing start is not punished.")]
     [SerializeField, Min(0f)] float m_SlowSpeedGraceSeconds = 3f;
+    [Tooltip("Surcharge on top of the slow-speed penalty while the car is travelling backwards.")]
+    [SerializeField, Min(0f)] float m_ReversePenaltyPerSecond = 0.6f;
     [SerializeField, Min(0f)] float m_LapBonus = 20f;
     [SerializeField, Min(0f)] float m_TimeBonusWeight = 20f;
     [SerializeField, Min(0f)] float m_FailurePenalty = 10f;
+    [Tooltip("Seconds without a new best progress before the run is abandoned. 0 disables.")]
+    [SerializeField, Min(0f)] float m_StallTimeoutSeconds = 8f;
     [SerializeField, Min(0f)] float m_CollisionPenalty = 2f;
+
+    [Header("Stage 1: learn to start and accelerate")]
+    [Tooltip("Per NEW on-road metre in stage 1. Later stages use Progress Reward above.")]
+    [SerializeField, Min(0f)] float m_Stage1ProgressReward = 0.05f;
+    [Tooltip("Minimum forward speed in m/s for positive shaping in stage 1.")]
+    [SerializeField, Min(0f)] float m_Stage1MinForwardSpeed = 0.05f;
+    [Tooltip("Total launch reward available per episode, paid only for new best forward speeds.")]
+    [SerializeField, Min(0f)] float m_LaunchBonus = 2f;
+    [SerializeField, Min(0.1f)] float m_LaunchTargetSpeedKph = 15f;
+    [SerializeField, Min(0f)] float m_LaunchWindowSeconds = 10f;
 
     [Header("OffTrack ground boundary sensor")]
     [SerializeField, Min(1f)] float m_BoundaryRange = 15f;
@@ -88,17 +103,17 @@ public class MyRacer : RacerAgent
         public bool MetTarget;
     }
 
-    enum RewardPart { Progress, Center, Speed, Time, OffTrack, Finish, Failure, Collision, SlowSpeed }
+    enum RewardPart { Progress, Center, Speed, Time, OffTrack, Finish, Failure, Collision, SlowSpeed, Launch, Count }
     enum GroundKind { Missing, Road, OffTrack }
 
-    readonly float[] m_RewardTotals = new float[9];
+    readonly float[] m_RewardTotals = new float[(int)RewardPart.Count];
     readonly HashSet<int> m_HitObstacles = new HashSet<int>();
     readonly Dictionary<GameObject, bool> m_ObstacleOriginalStates = new Dictionary<GameObject, bool>();
     readonly List<Collider> m_GroundColliders = new List<Collider>();
     readonly float[] m_ObstacleObservations = new float[28];
     readonly RaycastHit[] m_ObstacleHits = new RaycastHit[64];
 
-    BehaviorParameters m_Behavior;
+    BehaviorParameters m_BehaviorParams_;
     TrainingArena m_TrainingArena;
     TrackInstance m_TrackInstance;
     RaceClock m_Clock;
@@ -118,7 +133,9 @@ public class MyRacer : RacerAgent
     float m_LastElapsed;
     float m_LastProgress;
     float m_HighestProgress;
+    float m_HighestLaunchSpeedFraction;
     float m_OffTrackSeconds;
+    float m_StallSeconds;
     float m_CenterErrorSeconds;
     float m_ValidBoundarySeconds;
     float m_LeftDistance;
@@ -129,7 +146,7 @@ public class MyRacer : RacerAgent
 
     public int CurrentStage => m_CurrentStage;
     public float TargetLapTime => m_TargetLapTime;
-    public int ObservationSize => 9 + (m_WaypointCount > 0 ? m_WaypointCount : m_Waypoints) * 2
+    public int ObservationSize => 10 + (m_WaypointCount > 0 ? m_WaypointCount : m_Waypoints) * 2
         + (m_CurvatureCount > 0 ? m_CurvatureCount : m_CurvatureWindows) + 4 + 28;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -141,11 +158,11 @@ public class MyRacer : RacerAgent
         m_WaypointCount = Mathf.Clamp(m_Waypoints, 1, 20);
         m_CurvatureCount = Mathf.Clamp(m_CurvatureWindows, 1, 10);
         m_CurrentStage = Mathf.Clamp(m_ManualStage, 1, 3);
-        m_Behavior = GetComponent<BehaviorParameters>();
+        m_BehaviorParams_ = GetComponent<BehaviorParameters>();
         // ML-Agents 4.1 Agent.LazyInitialize calls Initialize BEFORE InitializeSensors.
         // Only the vector sensor size changes; action mapping, model and stack count are untouched.
-        if (m_Behavior != null)
-            m_Behavior.BrainParameters.VectorObservationSize = ObservationSize;
+        if (m_BehaviorParams_ != null)
+            m_BehaviorParams_.BrainParameters.VectorObservationSize = ObservationSize;
         ResetSensorValues();
         // Car / Track are deliberately not accessed: RacerRig.Bind can happen later.
     }
@@ -173,8 +190,8 @@ public class MyRacer : RacerAgent
         m_Clock = Car.GetComponent<RaceClock>();
         m_TrackInstance = FindBoundTrack();
         m_TrainingArena = FindOwningTrainingArena();
-        m_TrainingEpisode = m_TrainingArena != null && m_Behavior != null
-            && m_Behavior.BehaviorType == BehaviorType.Default;
+        m_TrainingEpisode = m_TrainingArena != null && m_BehaviorParams_ != null
+            && m_BehaviorParams_.BehaviorType == BehaviorType.Default;
         SelectStageAtBoundary();
         m_EpisodeLength = Mathf.Max(1f, Track.TotalLength);
         m_TargetLapTime = m_UseFixedTargetLapTime
@@ -183,7 +200,8 @@ public class MyRacer : RacerAgent
         m_LastElapsed = m_Clock != null ? m_Clock.Elapsed : 0f;
         m_LastProgress = Checkpoints.TraveledDistance;
         m_HighestProgress = Mathf.Clamp(m_LastProgress, 0f, m_EpisodeLength);
-        m_OffTrackSeconds = m_CenterErrorSeconds = m_ValidBoundarySeconds = 0f;
+        m_HighestLaunchSpeedFraction = 0f;
+        m_OffTrackSeconds = m_CenterErrorSeconds = m_ValidBoundarySeconds = m_StallSeconds = 0f;
         m_TerminalRecorded = false;
         m_HitObstacles.Clear();
         Array.Clear(m_RewardTotals, 0, m_RewardTotals.Length);
@@ -264,7 +282,7 @@ public class MyRacer : RacerAgent
         // Multiple arenas sharing a behavior train ONE policy, so share its recent results.
         // A slower arena changes stage at its own NEXT episode; stale-stage results are ignored.
         m_SharedHistory = true;
-        var key = gameObject.scene.handle + "/" + m_Behavior.BehaviorName;
+        var key = gameObject.scene.handle + "/" + m_BehaviorParams_.BehaviorName;
         if (!s_Histories.TryGetValue(key, out m_History))
         {
             m_History = new CurriculumHistory { Stage = Mathf.Clamp(m_ManualStage, 1, 3) };
@@ -279,7 +297,7 @@ public class MyRacer : RacerAgent
         {
             m_History.Stage++;
             m_History.Results.Clear();
-            Debug.Log($"[MyRacer] {m_Behavior.BehaviorName}: stage {m_History.Stage}; "
+            Debug.Log($"[MyRacer] {m_BehaviorParams_.BehaviorName}: stage {m_History.Stage}; "
                 + $"finish={finishRate:P0}, target={targetRate:P0}. Policy weights retained.", this);
         }
         m_CurrentStage = m_History.Stage;
@@ -307,7 +325,9 @@ public class MyRacer : RacerAgent
 
     void FixedUpdate()
     {
-        if (EnsureEpisode()) AccumulateRewards();
+        if (!EnsureEpisode()) return;
+        AccumulateRewards();
+        CheckStall();
     }
 
     public override void OnActionReceived(ActionBuffers actions)
@@ -334,6 +354,7 @@ public class MyRacer : RacerAgent
         var newMetres = Mathf.Max(0f, boundedProgress - m_HighestProgress);
         // Advance even OFF road. Re-entering cannot cash in distance travelled off road.
         m_HighestProgress = Mathf.Max(m_HighestProgress, boundedProgress);
+        m_StallSeconds = newMetres > 0f ? 0f : m_StallSeconds + dt;
         var onRoad = IsFullyOnRoad();
         Pay(RewardPart.Time, -NonNegative(m_TimePenaltyPerSecond) * dt);
         if (!onRoad)
@@ -348,16 +369,19 @@ public class MyRacer : RacerAgent
         }
 
         // Require road at BOTH endpoints, forward body velocity and track-direction velocity.
-        // New-distance gating applies to ALL positive shaping, including centre and speed.
+        // New-distance gating applies to ALL positive shaping, including the launch bonus.
         var alongSpeed = Vector3.Dot(Car.Body.linearVelocity, Projection.Forward);
         var forwardSpeed = Vector3.Dot(Car.Body.linearVelocity, Car.transform.forward);
+        var minForwardSpeed = NonNegative(m_CurrentStage == 1 ? m_Stage1MinForwardSpeed : m_MinForwardSpeed);
+        var canRewardProgress = onRoad && m_PreviousOnRoad && delta > 0f && newMetres > 0f
+            && forwardSpeed > minForwardSpeed && alongSpeed > minForwardSpeed;
         PaySlowSpeedPenalty(forwardSpeed, elapsed, dt);
-        if (onRoad && m_PreviousOnRoad && delta > 0f && newMetres > 0f
-            && forwardSpeed > NonNegative(m_MinForwardSpeed)
-            && alongSpeed > NonNegative(m_MinForwardSpeed))
+        PayLaunchBonus(forwardSpeed, alongSpeed, elapsed, canRewardProgress);
+        if (canRewardProgress)
         {
             newMetres = Mathf.Min(newMetres, delta);
-            Pay(RewardPart.Progress, NonNegative(m_ProgressReward) * newMetres);
+            var progressReward = m_CurrentStage == 1 ? m_Stage1ProgressReward : m_ProgressReward;
+            Pay(RewardPart.Progress, NonNegative(progressReward) * newMetres);
             Pay(RewardPart.Speed, NonNegative(m_SpeedRewardPerMetre) * newMetres
                 * Mathf.Clamp01(forwardSpeed / Positive(m_SpeedReference, 25f)));
             if (m_CurrentStage == 1 && m_LeftValid && m_RightValid)
@@ -367,6 +391,21 @@ public class MyRacer : RacerAgent
         m_PreviousOnRoad = onRoad;
     }
 
+    // Without this a car that cannot take a corner is free to shuffle for the arena's full 200 s:
+    // the terminal penalty is discounted to nothing that far out, so the shuffle is a local
+    // optimum and burns an episode's worth of samples going nowhere. Abandon the run instead.
+    void CheckStall()
+    {
+        if (!m_TrainingEpisode || m_TerminalRecorded) return;
+        var timeout = NonNegative(m_StallTimeoutSeconds);
+        if (timeout <= 0f) return;
+        if (m_LastElapsed < NonNegative(m_SlowSpeedGraceSeconds)) return; // Standing start is exempt.
+        if (m_StallSeconds < timeout) return;
+
+        OnRunFailed();
+        EndEpisode();
+    }
+
     bool IsFullyOnRoad()
     {
         if (IsOffTrack || Car.WheelsOffTrack > 0) return false;
@@ -374,17 +413,42 @@ public class MyRacer : RacerAgent
         return SampleGround(Car.transform.position) == GroundKind.Road;
     }
 
-    // Stage floor: 35 / 60 / 80 km/h. The cost scales with the shortfall, so a stopped car pays
-    // the full rate, a car at the floor pays nothing, and reverse is treated as fully stopped.
+    // Every stage now has a priced floor (18 / 60 / 80 km/h). Stage 1 used to observe its floor
+    // without ever being charged for missing it, which left crawling almost free.
+    // The cost scales with the shortfall: a stopped car pays the full rate, a car at the floor
+    // pays nothing. clamp01 prices reverse exactly like a stopped car on its own, which is what
+    // made the brake/reverse shuffle at an untakeable corner cost nothing extra — hence the
+    // separate surcharge below, which is what actually breaks that tie.
     void PaySlowSpeedPenalty(float forwardSpeed, float elapsed, float dt)
     {
         if (elapsed < NonNegative(m_SlowSpeedGraceSeconds)) return;
         var floorKph = StageMinSpeedKph(m_CurrentStage);
         if (floorKph <= 0f) return;
         var floor = floorKph / 3.6f; // km/h -> m/s, the same conversion the HUD uses.
+
         var shortfall = Mathf.Clamp01((floor - forwardSpeed) / floor);
-        if (shortfall <= 0f) return;
-        Pay(RewardPart.SlowSpeed, -NonNegative(m_SlowSpeedPenaltyPerSecond) * shortfall * dt);
+        if (shortfall > 0f)
+            Pay(RewardPart.SlowSpeed, -NonNegative(m_SlowSpeedPenaltyPerSecond) * shortfall * dt);
+
+        if (forwardSpeed < 0f)
+            Pay(RewardPart.SlowSpeed,
+                -NonNegative(m_ReversePenaltyPerSecond) * Mathf.Clamp01(-forwardSpeed / floor) * dt);
+    }
+
+    void PayLaunchBonus(float forwardSpeed, float alongSpeed, float elapsed, bool canRewardProgress)
+    {
+        if (m_CurrentStage != 1 || elapsed > NonNegative(m_LaunchWindowSeconds)
+            || !IsFinite(forwardSpeed) || !IsFinite(alongSpeed)) return;
+
+        var targetSpeed = Positive(m_LaunchTargetSpeedKph, 15f) / 3.6f;
+        // Use the lower forward speed so motion across the track cannot inflate the bonus.
+        var fraction = Mathf.Clamp01(Mathf.Min(forwardSpeed, alongSpeed) / targetSpeed);
+        var increase = Mathf.Max(0f, fraction - m_HighestLaunchSpeedFraction);
+        // Track the maximum even when ineligible. Re-entering the road or retracing old ground
+        // cannot cash in speed gained there, and braking then accelerating never pays twice.
+        m_HighestLaunchSpeedFraction = Mathf.Max(m_HighestLaunchSpeedFraction, fraction);
+        if (canRewardProgress)
+            Pay(RewardPart.Launch, NonNegative(m_LaunchBonus) * increase);
     }
 
     float StageMinSpeedKph(int stage)
@@ -668,6 +732,10 @@ public class MyRacer : RacerAgent
         }
         sensor.AddObservation(Car.ForwardSpeed / 50f);
         sensor.AddObservation(StageMinSpeedKph(m_CurrentStage) / 3.6f / 50f); // Same scale as the speed above.
+        // A negative throttle is the brake above ReverseEngageSpeed and reverse gear below it.
+        // At the /50 scale above that switch sits at 0.016 and is lost to normalisation, so the
+        // policy gets it as its own channel rather than having to resolve it out of the speed.
+        sensor.AddObservation(Car.ForwardSpeed < CarSpec.ReverseEngageSpeed ? 1f : 0f);
         sensor.AddObservation(Car.LocalVelocity.x / 50f);
         sensor.AddObservation(Car.LocalAngularVelocity.y / 5f);
         sensor.AddObservation(Car.SteerAngleNormalized);
